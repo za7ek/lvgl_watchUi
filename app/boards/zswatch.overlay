@@ -1,0 +1,24 @@
+& {
+    chosen {
+        zephyr,display = &display;
+        zephyr,console = &uart0;
+    };
+
+    display: display@0 {
+        compatible = "solomon,gc9a01";
+        reg = <0>;
+        spi-max-frequency = <32000000>;
+        reset-gpios = <&gpio0 14 GPIO_ACTIVE_LOW>;
+        dc-gpios = <&gpio0 13 GPIO_ACTIVE_HIGH>;
+        bl-gpios = <&gpio0 12 GPIO_ACTIVE_HIGH>;
+        width = <240>;
+        height = <240>;
+        rotation = <0>;
+        status = "okay";
+    };
+
+    spi0: spi@40003000 {
+        status = "okay";
+        cs-gpios = <&gpio0 11 GPIO_ACTIVE_LOW>;
+    };
+}

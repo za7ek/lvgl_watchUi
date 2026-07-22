@@ -1,0 +1,28 @@
+manifest:
+  remotes:
+    - name: zephyrproject-rtos
+      url-base: https://github.com/zephyrproject-rtos
+    - name: lvgl
+      url-base: https://github.com/lvgl
+
+  projects:
+    - name: zephyr
+      remote: zephyrproject-rtos
+      revision: v3.5.0
+      import:
+        path-prefix: zephyr
+
+    - name: lvgl
+      remote: lvgl
+      revision: v8.3.11
+      path: modules/lib/lvgl
+      import:
+        path-prefix: modules/lib
+
+    - name: zswatch
+      remote: zephyrproject-rtos
+      revision: main
+      path: modules/zswatch
+
+  self:
+    path: app
