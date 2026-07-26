@@ -63,6 +63,7 @@ static lv_obj_t *dusk_label = NULL;
 static lv_obj_t *dusk_time_label = NULL;
 static lv_obj_t *temp_label = NULL;
 static lv_obj_t *weather_label = NULL;
+static lv_obj_t *clock_bg = NULL;
 static lv_obj_t *clock_label = NULL;
 static lv_obj_t *date_label = NULL;
 static lv_obj_t *seconds_label = NULL;
@@ -81,6 +82,45 @@ static lv_obj_t *bodybatt_bar = NULL;
 
 static lv_timer_t *time_timer = NULL;
 static lv_timer_t *sensor_timer = NULL;
+
+/* Draw an 8-pixel grid texture on the clock background using the current
+ * theme's clock_off color, so the clock area has a subtle technical texture. */
+static void clock_draw_event_cb(lv_event_t *e)
+{
+    lv_layer_t *layer = lv_event_get_layer(e);
+    lv_obj_t *obj = lv_event_get_target(e);
+
+    const theme_colors_t *colors = theme_get_colors();
+
+    lv_draw_rect_dsc_t dsc;
+    lv_draw_rect_dsc_init(&dsc);
+    dsc.bg_color = colors->clock_off;
+    dsc.bg_opa = LV_OPA_20;
+    dsc.radius = 0;
+
+    lv_coord_t w = lv_obj_get_width(obj);
+    lv_coord_t h = lv_obj_get_height(obj);
+
+    lv_area_t area;
+
+    /* Vertical grid lines every 8 pixels */
+    for (lv_coord_t x = 0; x <= w; x += 8) {
+        area.x1 = x;
+        area.x2 = x;
+        area.y1 = 0;
+        area.y2 = h;
+        lv_draw_rect(layer, &dsc, &area);
+    }
+
+    /* Horizontal grid lines every 8 pixels */
+    for (lv_coord_t y = 0; y <= h; y += 8) {
+        area.x1 = 0;
+        area.x2 = w;
+        area.y1 = y;
+        area.y2 = y;
+        lv_draw_rect(layer, &dsc, &area);
+    }
+}
 
 static const char *get_moon_string(int phase)
 {
@@ -123,7 +163,7 @@ static void sensor_update_cb(lv_timer_t *timer)
 
 void watchface_start(void)
 {
-    theme_init(THEME_GREEN);
+    theme_init(THEME_YELLOW);
     const theme_colors_t *colors = theme_get_colors();
 
     lv_obj_set_style_bg_color(lv_scr_act(), colors->bg, LV_PART_MAIN);
@@ -195,12 +235,24 @@ void watchface_start(void)
     lv_obj_set_width(weather_label, SCREEN_W);
     lv_obj_set_pos(weather_label, 0, 58);
 
-    /* Large clock — using segments80 bitmap font */
-    clock_label = lv_label_create(root_page);
+    /* Large clock — using segments80 bitmap font.
+     * clock_bg provides a black backdrop with an 8-pixel grid texture drawn
+     * from the theme's clock_off color; the clock digits render on top. */
+    clock_bg = lv_obj_create(root_page);
+    lv_obj_set_pos(clock_bg, CLOCK_X, CLOCK_Y);
+    lv_obj_set_size(clock_bg, CLOCK_W, CLOCK_H);
+    lv_obj_set_style_bg_color(clock_bg, lv_color_black(), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(clock_bg, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_border_width(clock_bg, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(clock_bg, 0, LV_PART_MAIN);
+    lv_obj_set_style_radius(clock_bg, 0, LV_PART_MAIN);
+    lv_obj_add_event_cb(clock_bg, clock_draw_event_cb, LV_EVENT_DRAW_MAIN, NULL);
+
+    clock_label = lv_label_create(clock_bg);
     lv_obj_set_style_text_font(clock_label, &lv_font_segments80, LV_PART_MAIN);
     lv_obj_set_style_text_color(clock_label, colors->clock_on, LV_PART_MAIN);
     lv_obj_set_style_text_align(clock_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
-    lv_obj_set_pos(clock_label, CLOCK_X, CLOCK_Y);
+    lv_obj_set_pos(clock_label, 0, 0);
     lv_obj_set_size(clock_label, CLOCK_W, CLOCK_H);
     lv_label_set_long_mode(clock_label, LV_LABEL_LONG_CLIP);
 
@@ -457,6 +509,7 @@ void watchface_switch_theme(void)
     lv_obj_set_style_bg_color(lv_scr_act(), colors->bg, LV_PART_MAIN);
     lv_obj_set_style_bg_color(root_page, colors->bg, LV_PART_MAIN);
     lv_obj_set_style_text_color(clock_label, colors->clock_on, LV_PART_MAIN);
+    lv_obj_invalidate(clock_bg);
 
     lv_obj_set_style_text_color(dawn_label, colors->field_lbl, LV_PART_MAIN);
     lv_obj_set_style_text_color(dawn_time_label, colors->data_val, LV_PART_MAIN);
@@ -465,7 +518,7 @@ void watchface_switch_theme(void)
     lv_obj_set_style_text_color(moon_label, colors->moon, LV_PART_MAIN);
     lv_obj_set_style_text_color(temp_label, colors->text, LV_PART_MAIN);
     lv_obj_set_style_text_color(weather_label, colors->weather, LV_PART_MAIN);
-    lv_obj_set_style_text_color(date_label, colors->text, LV_PART_MAIN);
+    lv_obj_set_style_text_color(date_label, colors->clock_on, LV_PART_MAIN);
     lv_obj_set_style_text_color(seconds_label, colors->data_val, LV_PART_MAIN);
 
     lv_obj_set_style_text_color(field1_label, colors->field_lbl, LV_PART_MAIN);
