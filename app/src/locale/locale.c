@@ -1,20 +1,55 @@
 #include "locale.h"
 
-language_t current_lang = LANG_ZH;
+language_t current_lang = LANG_EN;
 
 static const char *zh_strings[] = {
-    "星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日",
-    "一月", "二月", "三月", "四月", "五月", "六月", "七月", "八月", "九月", "十月", "十一月", "十二月",
-    "晴", "多云", "阴", "雨", "雪",
-    "心率", "步数", "电池",
-    "中文", "English",
+    "\xe6\x98\x9f\xe6\x9c\x9f\xe4\xb8\x80",
+    "\xe6\x98\x9f\xe6\x9c\x9f\xe4\xba\x8c",
+    "\xe6\x98\x9f\xe6\x9c\x9f\xe4\xb8\x89",
+    "\xe6\x98\x9f\xe6\x9c\x9f\xe5\x9b\x9b",
+    "\xe6\x98\x9f\xe6\x9c\x9f\xe4\xba\x94",
+    "\xe6\x98\x9f\xe6\x9c\x9f\xe5\x85\xad",
+    "\xe6\x98\x9f\xe6\x9c\x9f\xe6\x97\xa5",
+    "\xe4\xb8\x80\xe6\x9c\x88",
+    "\xe4\xba\x8c\xe6\x9c\x88",
+    "\xe4\xb8\x89\xe6\x9c\x88",
+    "\xe5\x9b\x9b\xe6\x9c\x88",
+    "\xe4\xba\x94\xe6\x9c\x88",
+    "\xe5\x85\xad\xe6\x9c\x88",
+    "\xe4\xb8\x83\xe6\x9c\x88",
+    "\xe5\x85\xab\xe6\x9c\x88",
+    "\xe4\xb9\x9d\xe6\x9c\x88",
+    "\xe5\x8d\x81\xe6\x9c\x88",
+    "\xe5\x8d\x81\xe4\xb8\x80\xe6\x9c\x88",
+    "\xe5\x8d\x81\xe4\xba\x8c\xe6\x9c\x88",
+    "\xe6\x99\xb4",
+    "\xe5\xa4\x9a\xe4\xba\x91",
+    "\xe9\x98\xb4",
+    "\xe9\x9b\xa8",
+    "\xe9\x9b\xaa",
+    "\xe5\xbf\x83\xe7\x8e\x87",
+    "\xe6\xad\xa5\xe6\x95\xb0",
+    "\xe7\x94\xb5\xe6\xb1\xa0",
+    "\xe6\x97\xa0\xe6\x96\x91",
+    "\xe5\x36\x81\xe8\xb7\xaf\xe9\x87\x8c",
+    "\xe6\x97\xa5\xe5\x87\xba",
+    "\xe6\x97\xa8\xe8\x90\xbd",
+    "\xe6\x96\xb0\xe6\x9c\x88",
+    "\xe4\xb8\x8a\xe5\xbc\xa6",
+    "\xe6\xbb\xa1\xe6\x9c\x88",
+    "\xe4\xb8\x8b\xe5\xbc\xa6",
+    "\xe4\xb8\xad\xe6\x96\x87",
+    "English",
 };
 
 static const char *en_strings[] = {
-    "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday",
-    "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December",
-    "Sunny", "Cloudy", "Overcast", "Rain", "Snow",
-    "HR", "Steps", "Battery",
+    "MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN",
+    "JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC",
+    "SUNNY", "CLOUDY", "OVERCAST", "RAIN", "SNOW",
+    "HR", "STEPS", "BATTERY",
+    "FLOORS", "CAL",
+    "DAWN", "DUSK",
+    "NEW", "1QTR", "FULL", "3QTR",
     "Chinese", "English",
 };
 
@@ -33,7 +68,7 @@ const char *locale_get_string(locale_str_id_t id)
     if (id >= LOCALE_STR_COUNT) {
         return "";
     }
-    
+
     if (current_lang == LANG_ZH) {
         return zh_strings[id];
     } else {

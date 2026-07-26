@@ -1,3 +1,11 @@
+source "Kconfig.zephyr"
+menu "My Application"
+    config ZSWATCH_ROUND_SCREEN
+        bool "Enable round screen support for ZSWATCH"
+        default y
+        help
+          Enable round screen display support.
+
 config SEGMENT34_SHOW_LUNAR
     bool "Show Lunar Calendar"
     default y
@@ -23,3 +31,5 @@ config SEGMENT34_ROUND_SCREEN
     default y
     help
         Enable round screen layout adjustments for 240x240 displays.
+
+endmenu

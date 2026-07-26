@@ -1,0 +1,28 @@
+{
+  "version": 4,
+  "configurations": [
+    {
+      "name": "Zephyr (native_sim)",
+      "includePath": [
+        "/app/src",
+        "/app/src/components",
+        "/app/src/locale",
+        "/app/src/theme",
+        "/app/src/fonts",
+        "/home/zheng_fang/zephyr-project/zephyr/include",
+        "/home/zheng_fang/zephyr-project/zephyr/include/zephyr",
+        "/home/zheng_fang/zephyr-project/modules/lib/gui/lvgl/src",
+        "/home/zheng_fang/zephyr-project/zephyr/modules/lvgl/include",
+        "/home/zheng_fang/zephyr-project/native_ui/zephyr/include/generated",
+        "/home/zheng_fang/zephyr-project/native_ui/zephyr/include/generated/zephyr"
+      ],
+      "defines": [
+        "KERNEL",
+        "__ZEPHYR__=1",
+        "LV_CONF_INCLUDE_SIMPLE=1"
+      ],
+      "cStandard": "c17",
+      "intelliSenseMode": "linux-gcc-x64"
+    }
+  ]
+}

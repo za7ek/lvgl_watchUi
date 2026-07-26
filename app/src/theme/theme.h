@@ -24,6 +24,14 @@ typedef struct {
     lv_color_t heart_rate;
     lv_color_t steps;
     lv_color_t battery;
+    lv_color_t field_lbl;
+    lv_color_t field_bg;
+    lv_color_t data_val;
+    lv_color_t stress;
+    lv_color_t bodybatt;
+    lv_color_t notif;
+    lv_color_t moon;
+    lv_color_t outline;
 } theme_colors_t;
 
 void theme_init(theme_color_t theme);

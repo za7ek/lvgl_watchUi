@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include "lunar_calendar.h"
 
 static const uint32_t lunar_year_data[] = {
@@ -136,7 +137,7 @@ void lunar_calendar_convert(uint16_t solar_year, uint8_t solar_month, uint8_t so
     } else if (lDay < 30) {
         snprintf(lunar->day_name, sizeof(lunar->day_name), "%s%s", day_names[3], day_digits[lDay - 20]);
     } else {
-        snprintf(lunar->day_name, sizeof(lunar->day_name), "%s十", day_names[3]);
+        snprintf(lunar->day_name, sizeof(lunar->day_name), "%s十", day_names[4]);
     }
     
     snprintf(lunar->jieqi, sizeof(lunar->jieqi), "");
@@ -144,7 +145,7 @@ void lunar_calendar_convert(uint16_t solar_year, uint8_t solar_month, uint8_t so
 
 const char* lunar_get_year_name(uint16_t year)
 {
-    static char buf[12];
+    static char buf[20];
     snprintf(buf, sizeof(buf), "%s%s年(%s)", 
              gan[(year - 1900) % 10], zhi[(year - 1900) % 12], shengxiao[(year - 1900) % 12]);
     return buf;
@@ -152,7 +153,7 @@ const char* lunar_get_year_name(uint16_t year)
 
 const char* lunar_get_month_name(uint8_t month, uint8_t leap)
 {
-    static char buf[8];
+    static char buf[16];
     if (leap) {
         snprintf(buf, sizeof(buf), "闰%s月", month_names[month]);
     } else {
@@ -163,7 +164,7 @@ const char* lunar_get_month_name(uint8_t month, uint8_t leap)
 
 const char* lunar_get_day_name(uint8_t day)
 {
-    static char buf[4];
+    static char buf[8];
     if (day <= 10) {
         snprintf(buf, sizeof(buf), "%s%s", day_names[1], day_digits[day]);
     } else if (day < 20) {
@@ -173,7 +174,7 @@ const char* lunar_get_day_name(uint8_t day)
     } else if (day < 30) {
         snprintf(buf, sizeof(buf), "%s%s", day_names[3], day_digits[day - 20]);
     } else {
-        snprintf(buf, sizeof(buf), "%s十", day_names[3]);
+        snprintf(buf, sizeof(buf), "%s十", day_names[4]);
     }
     return buf;
 }

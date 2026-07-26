@@ -1,0 +1,17 @@
+/*
+ * native_sim device tree overlay:
+ * Force the SDL display to 240x240 to match the real hardware (GC9A01 round
+ * 240x240 display on Xiao BLE). This ensures widget layout and buffer sizes
+ * are tested at the real resolution even in the simulator.
+ */
+
+/ {
+    chosen {
+        zephyr,display = &sdl_dc;
+    };
+};
+
+&sdl_dc {
+    width = <240>;
+    height = <240>;
+};

@@ -1,138 +1,136 @@
 #include "segment34.h"
+#include <stdlib.h>
+#include <string.h>
 
-static const uint16_t segment_masks[10] = {
-    0x3FF, 0x060, 0x5DB, 0x5FB, 0x66B, 0x7BB, 0x7FB, 0x0EB, 0x7FF, 0x6FB
+static const uint16_t segment_masks_7seg[10] = {
+    0x3F, 0x06, 0x5B, 0x4F, 0x66,
+    0x6D, 0x7D, 0x07, 0x7F, 0x6F
 };
 
-static const int seg_positions[17][2] = {
-    {0, 0}, {1, 0}, {2, 0},
-    {0, 1},          {2, 1},
-    {0, 2}, {1, 2}, {2, 2},
-    {0, 3},          {2, 3},
-    {0, 4}, {1, 4}, {2, 4},
-    {0, 5},          {2, 5},
-    {0, 6}, {1, 6}, {2, 6}
-};
-
-void segment34_init(segment34_t *seg, lv_obj_t *parent, uint16_t x, uint16_t y, uint16_t width, uint16_t height)
+static void segment34_draw_event_cb(lv_event_t *e)
 {
-    seg->parent = parent;
+    lv_obj_t *obj = lv_event_get_target(e);
+    segment34_t *seg = (segment34_t *)lv_obj_get_user_data(obj);
+    if (!seg) return;
+
+    lv_layer_t *layer = lv_event_get_layer(e);
+
+    lv_draw_rect_dsc_t rect_dsc;
+    lv_draw_rect_dsc_init(&rect_dsc);
+    rect_dsc.radius = 1;
+    rect_dsc.bg_opa = LV_OPA_COVER;
+
+    uint16_t digit_w = seg->width / 5;
+    uint16_t digit_h = seg->height;
+    uint16_t sw = digit_w / 4;
+    uint16_t sh = digit_h / 7;
+    uint16_t colon_spacing = 8;
+
+    for (int digit = 0; digit < SEGMENT34_DIGITS; digit++) {
+        uint16_t digit_x;
+        if (digit < 2) {
+            digit_x = digit * (digit_w + colon_spacing / 2);
+        } else {
+            digit_x = digit * (digit_w + colon_spacing / 2) + colon_spacing;
+        }
+
+        uint16_t mask = segment_masks_7seg[seg->digits[digit]];
+        int16_t dx = digit_x + (digit_w - sw * 2 - 2) / 2;
+        int16_t dy = (digit_h - sh * 7) / 2;
+
+        lv_draw_rect_dsc_t dsc = rect_dsc;
+        dsc.bg_color = seg->color_on;
+
+        lv_area_t sa = {dx, dy, dx + sw * 2 + 2, dy + sh};
+        lv_area_t sb = {dx + sw + 2, dy + sh, dx + sw * 2 + 2, dy + sh * 4};
+        lv_area_t sc = {dx + sw + 2, dy + sh * 4, dx + sw * 2 + 2, dy + sh * 7};
+        lv_area_t sd = {dx, dy + sh * 6, dx + sw * 2 + 2, dy + sh * 7};
+        lv_area_t se = {dx, dy + sh * 4, dx + sw, dy + sh * 7};
+        lv_area_t sf = {dx, dy + sh, dx + sw, dy + sh * 4};
+        lv_area_t sg = {dx, dy + sh * 3, dx + sw * 2 + 2, dy + sh * 4};
+
+        if (mask & 0x01) lv_draw_rect(layer, &dsc, &sa);
+        if (mask & 0x02) lv_draw_rect(layer, &dsc, &sb);
+        if (mask & 0x04) lv_draw_rect(layer, &dsc, &sc);
+        if (mask & 0x08) lv_draw_rect(layer, &dsc, &sd);
+        if (mask & 0x10) lv_draw_rect(layer, &dsc, &se);
+        if (mask & 0x20) lv_draw_rect(layer, &dsc, &sf);
+        if (mask & 0x40) lv_draw_rect(layer, &dsc, &sg);
+    }
+
+    if (seg->show_colon) {
+        uint16_t colon_x = 2 * digit_w + colon_spacing / 2;
+        uint16_t colon_y1 = seg->height / 2 - 8;
+        uint16_t colon_y2 = seg->height / 2 + 4;
+
+        lv_draw_rect_dsc_t colon_dsc = rect_dsc;
+        colon_dsc.bg_color = seg->color_on;
+
+        lv_area_t dot1 = {colon_x, colon_y1, colon_x + 4, colon_y1 + 4};
+        lv_area_t dot2 = {colon_x, colon_y2, colon_x + 4, colon_y2 + 4};
+
+        lv_draw_rect(layer, &colon_dsc, &dot1);
+        lv_draw_rect(layer, &colon_dsc, &dot2);
+    }
+}
+
+void segment34_init(segment34_t *seg, lv_obj_t *parent, uint16_t x, uint16_t y,
+                    uint16_t width, uint16_t height)
+{
     seg->width = width;
     seg->height = height;
-    seg->color_on = lv_color_hex(0x00FF00);
-    seg->color_off = lv_color_hex(0x1a1a1a);
+    seg->color_on = lv_color_hex(0xFFAA00);
+    seg->color_off = lv_color_hex(0x2A1A0A);
     seg->show_colon = true;
-    
-    uint16_t digit_w = width / 5;
-    uint16_t digit_h = height;
-    uint16_t seg_w = digit_w / 4;
-    uint16_t seg_h = digit_h / 8;
-    uint16_t colon_spacing = 10;
-    
-    for (int digit = 0; digit < SEGMENT34_DIGITS; digit++) {
-        uint16_t dx = x;
-        if (digit < 2) {
-            dx += digit * (digit_w + colon_spacing / 2);
-        } else {
-            dx += digit * (digit_w + colon_spacing / 2) + colon_spacing;
-        }
-        
-        for (int i = 0; i < SEGMENT34_SEGMENTS_PER_DIGIT; i++) {
-            lv_obj_t *segment = lv_obj_create(parent);
-            lv_obj_set_size(segment, seg_w - 2, seg_h - 2);
-            lv_obj_set_pos(segment, dx + seg_positions[i][0] * seg_w, y + seg_positions[i][1] * seg_h);
-            lv_obj_set_style_bg_color(segment, seg->color_off, LV_PART_MAIN);
-            lv_obj_set_style_bg_opa(segment, LV_OPA_COVER, LV_PART_MAIN);
-            lv_obj_set_style_border_width(segment, 0, LV_PART_MAIN);
-            seg->segments[digit * SEGMENT34_SEGMENTS_PER_DIGIT + i] = segment;
-        }
-    }
-    
-    uint16_t colon_x = x + 2 * digit_w + colon_spacing / 2;
-    
-    seg->colon1 = lv_obj_create(parent);
-    lv_obj_set_size(seg->colon1, 6, 6);
-    lv_obj_set_pos(seg->colon1, colon_x, y + height / 2 - 12);
-    lv_obj_set_style_bg_color(seg->colon1, seg->color_on, LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(seg->colon1, LV_OPA_COVER, LV_PART_MAIN);
-    
-    seg->colon2 = lv_obj_create(parent);
-    lv_obj_set_size(seg->colon2, 6, 6);
-    lv_obj_set_pos(seg->colon2, colon_x, y + height / 2 + 6);
-    lv_obj_set_style_bg_color(seg->colon2, seg->color_on, LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(seg->colon2, LV_OPA_COVER, LV_PART_MAIN);
+    seg->digits[0] = 0;
+    seg->digits[1] = 0;
+    seg->digits[2] = 0;
+    seg->digits[3] = 0;
+
+    seg->obj = lv_obj_create(parent);
+    lv_obj_set_size(seg->obj, width, height);
+    lv_obj_set_pos(seg->obj, x, y);
+    lv_obj_set_style_bg_opa(seg->obj, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_border_width(seg->obj, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(seg->obj, 0, LV_PART_MAIN);
+    lv_obj_set_style_radius(seg->obj, 0, LV_PART_MAIN);
+    lv_obj_set_user_data(seg->obj, seg);
+    lv_obj_add_event_cb(seg->obj, segment34_draw_event_cb, LV_EVENT_DRAW_MAIN, NULL);
 }
 
 void segment34_set_color(segment34_t *seg, lv_color_t on, lv_color_t off)
 {
     seg->color_on = on;
     seg->color_off = off;
-    
-    for (int i = 0; i < SEGMENT34_TOTAL_SEGMENTS; i++) {
-        if (seg->segments[i]) {
-            lv_obj_set_style_bg_color(seg->segments[i], off, LV_PART_MAIN);
-        }
-    }
-    
-    lv_color_t colon_color = seg->show_colon ? on : off;
-    if (seg->colon1) {
-        lv_obj_set_style_bg_color(seg->colon1, colon_color, LV_PART_MAIN);
-    }
-    if (seg->colon2) {
-        lv_obj_set_style_bg_color(seg->colon2, colon_color, LV_PART_MAIN);
-    }
-}
-
-static void segment34_update_digit(segment34_t *seg, uint8_t digit_idx, uint8_t value)
-{
-    uint16_t mask = segment_masks[value];
-    uint8_t start = digit_idx * SEGMENT34_SEGMENTS_PER_DIGIT;
-    
-    for (int i = 0; i < SEGMENT34_SEGMENTS_PER_DIGIT; i++) {
-        if (seg->segments[start + i]) {
-            if (mask & (1 << i)) {
-                lv_obj_set_style_bg_color(seg->segments[start + i], seg->color_on, LV_PART_MAIN);
-            } else {
-                lv_obj_set_style_bg_color(seg->segments[start + i], seg->color_off, LV_PART_MAIN);
-            }
-        }
+    if (seg->obj) {
+        lv_obj_invalidate(seg->obj);
     }
 }
 
 void segment34_set_time(segment34_t *seg, uint8_t hours, uint8_t minutes, uint8_t seconds)
 {
-    segment34_update_digit(seg, 0, hours / 10);
-    segment34_update_digit(seg, 1, hours % 10);
-    segment34_update_digit(seg, 2, minutes / 10);
-    segment34_update_digit(seg, 3, minutes % 10);
-    
+    seg->digits[0] = hours / 10;
+    seg->digits[1] = hours % 10;
+    seg->digits[2] = minutes / 10;
+    seg->digits[3] = minutes % 10;
+    if (seg->obj) {
+        lv_obj_invalidate(seg->obj);
+    }
     (void)seconds;
 }
 
 void segment34_update_colon(segment34_t *seg, bool show)
 {
     seg->show_colon = show;
-    lv_color_t color = show ? seg->color_on : seg->color_off;
-    
-    if (seg->colon1) {
-        lv_obj_set_style_bg_color(seg->colon1, color, LV_PART_MAIN);
-    }
-    if (seg->colon2) {
-        lv_obj_set_style_bg_color(seg->colon2, color, LV_PART_MAIN);
+    if (seg->obj) {
+        lv_obj_invalidate(seg->obj);
     }
 }
 
 void segment34_delete(segment34_t *seg)
 {
-    for (int i = 0; i < SEGMENT34_TOTAL_SEGMENTS; i++) {
-        if (seg->segments[i]) {
-            lv_obj_del(seg->segments[i]);
-        }
-    }
-    if (seg->colon1) {
-        lv_obj_del(seg->colon1);
-    }
-    if (seg->colon2) {
-        lv_obj_del(seg->colon2);
+    if (seg->obj) {
+        lv_obj_del(seg->obj);
+        seg->obj = NULL;
     }
 }

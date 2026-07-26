@@ -1,0 +1,19 @@
+CompileFlags:
+  CompilationDatabase: /home/zheng_fang/zephyr-project/native_ui
+  Add:
+    - -I/home/zheng_fang/zephyr-project/lgvl_watchUi/app/src
+    - -I/home/zheng_fang/zephyr-project/lgvl_watchUi/app/src/components
+    - -I/home/zheng_fang/zephyr-project/lgvl_watchUi/app/src/locale
+    - -I/home/zheng_fang/zephyr-project/lgvl_watchUi/app/src/theme
+    - -I/home/zheng_fang/zephyr-project/lgvl_watchUi/app/src/fonts
+    - -I/home/zheng_fang/zephyr-project/zephyr/include
+    - -I/home/zheng_fang/zephyr-project/zephyr/include/zephyr
+    - -I/home/zheng_fang/zephyr-project/modules/lib/gui/lvgl/src
+    - -I/home/zheng_fang/zephyr-project/zephyr/modules/lvgl/include
+    - -I/home/zheng_fang/zephyr-project/native_ui/zephyr/include/generated
+    - -I/home/zheng_fang/zephyr-project/native_ui/zephyr/include/generated/zephyr
+    - -DKERNEL
+    - -D__ZEPHYR__=1
+    - -DLV_CONF_INCLUDE_SIMPLE=1
+    - -std=c17
+  Compiler: gcc

@@ -9,9 +9,9 @@ typedef struct {
     uint8_t day;
     uint8_t leap_month;
     uint8_t day_of_week;
-    char year_name[12];
-    char month_name[8];
-    char day_name[4];
+    char year_name[20];
+    char month_name[16];
+    char day_name[8];
     char jieqi[8];
 } lunar_date_t;
 
