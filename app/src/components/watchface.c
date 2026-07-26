@@ -452,11 +452,16 @@ void watchface_update_time(void)
     dig[0] = '0' + (timeinfo.tm_min % 10);
     lv_label_set_text(clock_lbl_fg_m2, dig);
 
-    /* Colon blink: show on even seconds, hide on odd seconds */
+    /* Colon blink: show on even seconds, hide on odd seconds.
+     * We toggle the bg layer (# in clock_on color):
+     *   visible → yellow dots show through the colon glyph's transparent areas
+     *   hidden  → dots blend into the dark column background (off-state)
+     * The fg layer (colon glyph in black) stays always visible so the
+     * grid/dot pattern remains consistent whether the colon is on or off. */
     if (timeinfo.tm_sec % 2 == 0) {
-        lv_obj_clear_flag(clock_lbl_fg_colon, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(clock_lbl_bg_colon, LV_OBJ_FLAG_HIDDEN);
     } else {
-        lv_obj_add_flag(clock_lbl_fg_colon, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(clock_lbl_bg_colon, LV_OBJ_FLAG_HIDDEN);
     }
 
     char sec_str[8];
