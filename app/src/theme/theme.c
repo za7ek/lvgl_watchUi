@@ -1,7 +1,7 @@
-#include <lvgl.h>
+﻿#include <lvgl.h>
 #include "theme.h"
 
-static theme_color_t current_theme = THEME_GREEN;
+static theme_color_t current_theme = THEME_YELLOW;
 
 static const theme_colors_t themes[] = {
     {

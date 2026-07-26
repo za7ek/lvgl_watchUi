@@ -4,10 +4,12 @@
 #include <lvgl.h>
 
 typedef enum {
+    THEME_YELLOW,
+    THEME_PINK,
+    THEME_ORANGE_LIGHT,
     THEME_GREEN,
     THEME_BLUE,
     THEME_RED,
-    THEME_ORANGE,
     THEME_PURPLE,
     THEME_CYAN,
     THEME_COUNT
