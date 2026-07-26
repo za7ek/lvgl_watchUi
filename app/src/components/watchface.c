@@ -99,23 +99,24 @@ static lv_timer_t *sensor_timer = NULL;
 
 /* Each clock column uses a 3-layer rendering stack (bottom to top):
  *
- *   Layer 0 (col bg):  solid clock_off color  →  background base color
- *   Layer 1 (bg label): '#' glyph in clock_on  →  provides on-color that
- *                         shows through the digit's transparent segment areas
- *   Layer 2 (fg label): digit/':' in black     →  its filled (non-segment)
- *                         pixels paint the grid/dots in black; segment
- *                         areas stay transparent so the on-color shows
+ *   Layer 0 (col bg):  solid black         →  grid lines & dots show through
+ *   Layer 1 (bg label): '#' in clock_on    →  yellow base in segment areas
+ *   Layer 2 (fg label): digit/':' in clock_off  →  dark base in non-segment
+ *                                                   areas; segment areas
+ *                                                   stay transparent
  *
  * Font glyph layout (lv_font_segments80, 42×80, 4bpp):
- *   - '#' glyph: filled pixels = grid/dot pattern across the full cell
- *   - digit/':' glyphs: filled pixels = grid/dot pattern only in non-segment
- *     positions; segment positions are TRANSPARENT (cut out).
+ *   - Filled pixels = base color area (the "solid" background of each region)
+ *   - Transparent pixels = grid lines / dots (show the layer below)
+ *   - '#' glyph: filled pixels across the full cell (full-column base)
+ *   - digit/':' glyphs: filled pixels only in non-segment positions;
+ *     segment positions are TRANSPARENT (cut out).
  *     e.g. '8' has the most cut-outs (35% fill), '1' the fewest (71% fill).
  *
  * Final visual result:
- *   Segment areas (digit bars)  → clock_on  (yellow / theme color)
- *   Grid lines & dots           → black
- *   Background (empty areas)    → clock_off (dark column base) */
+ *   Inside digits (segment areas)  → clock_on base + black grid/dots
+ *   Outside digits (non-segment)   → clock_off base + black grid/dots
+ *   Grid lines & dots everywhere   → black */
 
 /* Column layout: 5 equal columns of 42px with 2px gaps
  * total = 5*42 + 4*2 = 218px, centered in 220px clock width → x offset 1 */
@@ -130,14 +131,15 @@ static lv_obj_t *clock_col_create(lv_obj_t *parent, lv_coord_t x, lv_coord_t w,
     lv_obj_t *col = lv_obj_create(parent);
     lv_obj_set_pos(col, x, 0);
     lv_obj_set_size(col, w, CLOCK_H);
-    lv_obj_set_style_bg_color(col, colors->clock_off, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(col, (lv_color_t)LV_COLOR_MAKE(0x00, 0x00, 0x00), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(col, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_width(col, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(col, 0, LV_PART_MAIN);
     lv_obj_set_style_radius(col, 0, LV_PART_MAIN);
 
     /* Layer 1 (bg label): '#' in clock_on color — its filled pixels provide
-     * the on-color that shows through the digit's transparent segment areas. */
+     * the on-color base that shows through the digit's transparent segment
+     * areas (grid/dots stay black from the column background). */
     lv_obj_t *bg = lv_label_create(col);
     lv_obj_set_style_text_font(bg, &lv_font_segments80, LV_PART_MAIN);
     lv_obj_set_style_text_color(bg, colors->clock_on, LV_PART_MAIN);
@@ -147,12 +149,14 @@ static lv_obj_t *clock_col_create(lv_obj_t *parent, lv_coord_t x, lv_coord_t w,
     lv_label_set_long_mode(bg, LV_LABEL_LONG_CLIP);
     lv_label_set_text(bg, bg_char);
 
-    /* Layer 2 (fg label): digit/colon in black — its filled (non-segment)
-     * pixels draw the grid/dots in black; segment positions stay transparent
-     * so the clock_on color from the bg layer shows through. */
+    /* Layer 2 (fg label): digit/colon in clock_off color — its filled
+     * (non-segment) pixels paint the off-color base over the bg layer;
+     * segment areas stay transparent so the on-color base shows through;
+     * grid/dot pixels stay transparent everywhere so the black column
+     * background shows through. */
     lv_obj_t *fg = lv_label_create(col);
     lv_obj_set_style_text_font(fg, &lv_font_segments80, LV_PART_MAIN);
-    lv_obj_set_style_text_color(fg, (lv_color_t)LV_COLOR_MAKE(0x00, 0x00, 0x00), LV_PART_MAIN);
+    lv_obj_set_style_text_color(fg, colors->clock_off, LV_PART_MAIN);
     lv_obj_set_style_text_align(fg, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     lv_obj_set_pos(fg, 0, 0);
     lv_obj_set_size(fg, w, CLOCK_H);
@@ -277,11 +281,12 @@ void watchface_start(void)
     lv_obj_set_pos(weather_label, 0, 48);
 
     /* Large clock — 5 equal columns, 3-layer rendering per column:
-     *   Layer 0 (col bg):  solid clock_off  →  dark column base
-     *   Layer 1 (bg label): '#' in clock_on  →  on-color shows through digit
-     *   Layer 2 (fg label): digit/':' in black  →  grid/dots painted black
-     * The font (lv_font_segments80) includes '#' as a full-column background
-     * fill, digits 0-9, and ':' — all 42×80 with built-in grid/dot pattern. */
+     *   Layer 0 (col bg):  solid black    →  grid/dots show through everywhere
+     *   Layer 1 (bg label): '#' in clock_on  →  on-color base in segment areas
+     *   Layer 2 (fg label): digit/':' in clock_off  →  off-color base in
+     *                                                    non-segment areas
+     * The font (lv_font_segments80) includes '#' as a full-column base fill,
+     * digits 0-9, and ':' — all 42×80 with built-in grid/dot cut-outs. */
     clock_bg = lv_obj_create(root_page);
     lv_obj_set_pos(clock_bg, CLOCK_X, CLOCK_Y);
     lv_obj_set_size(clock_bg, CLOCK_W, CLOCK_H);
@@ -454,10 +459,10 @@ void watchface_update_time(void)
 
     /* Colon blink: show on even seconds, hide on odd seconds.
      * We toggle the bg layer (# in clock_on color):
-     *   visible → yellow dots show through the colon glyph's transparent areas
-     *   hidden  → dots blend into the dark column background (off-state)
-     * The fg layer (colon glyph in black) stays always visible so the
-     * grid/dot pattern remains consistent whether the colon is on or off. */
+     *   visible → on-color base shows through colon's transparent dots → colon dots are lit
+     *   hidden  → dots show only the black column bg → dots blend into the grid/dot pattern
+     * The fg layer (colon glyph in clock_off color) stays always visible so
+     * the non-segment base and grid/dot pattern remain consistent. */
     if (timeinfo.tm_sec % 2 == 0) {
         lv_obj_clear_flag(clock_lbl_bg_colon, LV_OBJ_FLAG_HIDDEN);
     } else {
@@ -578,23 +583,24 @@ void watchface_switch_theme(void)
     lv_obj_set_style_bg_color(lv_scr_act(), colors->bg, LV_PART_MAIN);
     lv_obj_set_style_bg_color(root_page, colors->bg, LV_PART_MAIN);
 
-    /* Update clock column backgrounds (Layer 0: solid clock_off base color) */
-    lv_obj_set_style_bg_color(clock_col_h1, colors->clock_off, LV_PART_MAIN);
-    lv_obj_set_style_bg_color(clock_col_h2, colors->clock_off, LV_PART_MAIN);
-    lv_obj_set_style_bg_color(clock_col_colon, colors->clock_off, LV_PART_MAIN);
-    lv_obj_set_style_bg_color(clock_col_m1, colors->clock_off, LV_PART_MAIN);
-    lv_obj_set_style_bg_color(clock_col_m2, colors->clock_off, LV_PART_MAIN);
+    /* Clock column backgrounds (Layer 0: solid black for grid/dots)
+     * stays black across all themes — no update needed. */
 
-    /* Update clock bg labels (Layer 1: '#' in clock_on — shows through digit
-     * transparent segment areas to form the colored digit bars). */
+    /* Update clock bg labels (Layer 1: '#' in clock_on — provides the
+     * on-color base that shows through digit transparent segment areas). */
     lv_obj_set_style_text_color(clock_lbl_bg_h1, colors->clock_on, LV_PART_MAIN);
     lv_obj_set_style_text_color(clock_lbl_bg_h2, colors->clock_on, LV_PART_MAIN);
     lv_obj_set_style_text_color(clock_lbl_bg_colon, colors->clock_on, LV_PART_MAIN);
     lv_obj_set_style_text_color(clock_lbl_bg_m1, colors->clock_on, LV_PART_MAIN);
     lv_obj_set_style_text_color(clock_lbl_bg_m2, colors->clock_on, LV_PART_MAIN);
 
-    /* Clock fg labels (Layer 2: digit/':' in black — grid/dots stay black
-     * across all themes; no color update needed here). */
+    /* Update clock fg labels (Layer 2: digit/':' in clock_off — provides
+     * the off-color base in non-segment areas). */
+    lv_obj_set_style_text_color(clock_lbl_fg_h1, colors->clock_off, LV_PART_MAIN);
+    lv_obj_set_style_text_color(clock_lbl_fg_h2, colors->clock_off, LV_PART_MAIN);
+    lv_obj_set_style_text_color(clock_lbl_fg_colon, colors->clock_off, LV_PART_MAIN);
+    lv_obj_set_style_text_color(clock_lbl_fg_m1, colors->clock_off, LV_PART_MAIN);
+    lv_obj_set_style_text_color(clock_lbl_fg_m2, colors->clock_off, LV_PART_MAIN);
 
     lv_obj_set_style_text_color(dawn_label, colors->field_lbl, LV_PART_MAIN);
     lv_obj_set_style_text_color(dawn_time_label, colors->data_val, LV_PART_MAIN);
