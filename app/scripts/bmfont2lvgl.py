@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 Convert BMFont (.fnt + .png) to LVGL C array font format.
 Usage: python bmfont2lvgl.py <font_name> <fnt_file> <png_file> <output_c_file>
@@ -56,6 +56,7 @@ def extract_glyph_bmp(img, x, y, w, h):
                         alpha = (pixel[0] + pixel[1] + pixel[2]) // 3
                 else:
                     alpha = pixel
+                alpha = 255 - alpha
             else:
                 alpha = 0
             row.append(alpha)
@@ -74,7 +75,7 @@ def bmp_to_4bpp(glyph):
 
 def generate_c_font(font_name, fnt_path, png_path, out_path):
     common, chars = parse_fnt(fnt_path)
-    img = Image.open(png_path).convert('RGBA')
+    img = Image.open(png_path)
     
     line_height = common['lineHeight']
     base = common['base']
@@ -161,7 +162,8 @@ def generate_c_font(font_name, fnt_path, png_path, out_path):
         f.write(f"static const uint16_t {font_name}_unicode_list[] = {{\n")
         for i, g in enumerate(glyph_dsc):
             comma = ',' if i < len(glyph_dsc) - 1 else ''
-            f.write(f"    0x{g['unicode']:04X}{comma}\n")
+            offset_val = g['unicode'] - first_char
+            f.write(f"    0x{offset_val:04X}{comma}\n")
         f.write(f"}};\n\n")
         
         f.write(f"static const lv_font_fmt_txt_cmap_t {font_name}_cmaps[] = {{\n")
