@@ -152,7 +152,7 @@ static lv_obj_t *clock_col_create(lv_obj_t *parent, lv_coord_t x, lv_coord_t w,
      * so the clock_on color from the bg layer shows through. */
     lv_obj_t *fg = lv_label_create(col);
     lv_obj_set_style_text_font(fg, &lv_font_segments80, LV_PART_MAIN);
-    lv_obj_set_style_text_color(fg, LV_COLOR_BLACK, LV_PART_MAIN);
+    lv_obj_set_style_text_color(fg, LV_COLOR_MAKE(0x00, 0x00, 0x00), LV_PART_MAIN);
     lv_obj_set_style_text_align(fg, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     lv_obj_set_pos(fg, 0, 0);
     lv_obj_set_size(fg, w, CLOCK_H);
