@@ -26,7 +26,7 @@ LOG_MODULE_REGISTER(watchface, LOG_LEVEL_INF);
 #define CLOCK_W 220
 #define CLOCK_H 80
 #define CLOCK_X 10
-#define CLOCK_Y 80
+#define CLOCK_Y 66
 
 #define FONT_LABEL  &lv_font_montserrat_8
 #define FONT_DATA   &lv_font_montserrat_10
@@ -94,19 +94,17 @@ static lv_timer_t *time_timer = NULL;
 static lv_timer_t *sensor_timer = NULL;
 
 /* Draw a fine 4-pixel grid texture on each clock column background.
- * Uses the theme's clock_on color at low opacity over the column's
- * clock_off background to produce a subtle technical grid look. */
+ * Uses white at low opacity over the column's clock_off background
+ * to produce a subtle technical grid look. */
 static void clock_draw_event_cb(lv_event_t *e)
 {
     lv_layer_t *layer = lv_event_get_layer(e);
     lv_obj_t *obj = lv_event_get_target(e);
 
-    const theme_colors_t *colors = theme_get_colors();
-
     lv_draw_rect_dsc_t dsc;
     lv_draw_rect_dsc_init(&dsc);
-    dsc.bg_color = colors->clock_on;
-    dsc.bg_opa = LV_OPA_20;
+    dsc.bg_color = lv_color_white();
+    dsc.bg_opa = LV_OPA_10;
     dsc.radius = 0;
 
     lv_coord_t w = lv_obj_get_width(obj);
@@ -228,35 +226,35 @@ void watchface_start(void)
     lv_obj_set_style_text_font(dawn_label, FONT_LABEL, LV_PART_MAIN);
     lv_obj_set_style_text_color(dawn_label, colors->field_lbl, LV_PART_MAIN);
     lv_obj_set_style_text_align(dawn_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
-    lv_obj_set_pos(dawn_label, 20, 8);
+    lv_obj_set_pos(dawn_label, 20, 6);
     lv_obj_set_width(dawn_label, 65);
 
     dawn_time_label = lv_label_create(root_page);
     lv_obj_set_style_text_font(dawn_time_label, FONT_DATA, LV_PART_MAIN);
     lv_obj_set_style_text_color(dawn_time_label, colors->data_val, LV_PART_MAIN);
     lv_obj_set_style_text_align(dawn_time_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
-    lv_obj_set_pos(dawn_time_label, 20, 22);
+    lv_obj_set_pos(dawn_time_label, 20, 18);
     lv_obj_set_width(dawn_time_label, 65);
 
     moon_label = lv_label_create(root_page);
     lv_obj_set_style_text_font(moon_label, FONT_DATA, LV_PART_MAIN);
     lv_obj_set_style_text_color(moon_label, colors->moon, LV_PART_MAIN);
     lv_obj_set_style_text_align(moon_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
-    lv_obj_set_pos(moon_label, CENTER_X - 20, 14);
+    lv_obj_set_pos(moon_label, CENTER_X - 20, 10);
     lv_obj_set_width(moon_label, 40);
 
     dusk_label = lv_label_create(root_page);
     lv_obj_set_style_text_font(dusk_label, FONT_LABEL, LV_PART_MAIN);
     lv_obj_set_style_text_color(dusk_label, colors->field_lbl, LV_PART_MAIN);
     lv_obj_set_style_text_align(dusk_label, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
-    lv_obj_set_pos(dusk_label, 155, 8);
+    lv_obj_set_pos(dusk_label, 155, 6);
     lv_obj_set_width(dusk_label, 65);
 
     dusk_time_label = lv_label_create(root_page);
     lv_obj_set_style_text_font(dusk_time_label, FONT_DATA, LV_PART_MAIN);
     lv_obj_set_style_text_color(dusk_time_label, colors->data_val, LV_PART_MAIN);
     lv_obj_set_style_text_align(dusk_time_label, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
-    lv_obj_set_pos(dusk_time_label, 155, 22);
+    lv_obj_set_pos(dusk_time_label, 155, 18);
     lv_obj_set_width(dusk_time_label, 65);
 
     /* Weather: temp line + description line
@@ -267,14 +265,14 @@ void watchface_start(void)
     lv_obj_set_style_text_color(temp_label, colors->text, LV_PART_MAIN);
     lv_obj_set_style_text_align(temp_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     lv_obj_set_width(temp_label, SCREEN_W);
-    lv_obj_set_pos(temp_label, 0, 40);
+    lv_obj_set_pos(temp_label, 0, 32);
 
     weather_label = lv_label_create(root_page);
     lv_obj_set_style_text_font(weather_label, FONT_MED, LV_PART_MAIN);
     lv_obj_set_style_text_color(weather_label, colors->weather, LV_PART_MAIN);
     lv_obj_set_style_text_align(weather_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     lv_obj_set_width(weather_label, SCREEN_W);
-    lv_obj_set_pos(weather_label, 0, 58);
+    lv_obj_set_pos(weather_label, 0, 48);
 
     /* Large clock — 5-column layout with per-column textured background.
      * Columns: hour-tens | hour-ones | colon(dots) | minute-tens | minute-ones
@@ -302,11 +300,11 @@ void watchface_start(void)
     clock_lbl_m1 = clock_digit_create(clock_col_m1, 44, colors->clock_on);
     clock_lbl_m2 = clock_digit_create(clock_col_m2, 40, colors->clock_on);
 
-    /* Colon: two black square dots, top and bottom */
+    /* Colon: two golden square dots (same color as digits), top and bottom */
     clock_dot_top = lv_obj_create(clock_col_colon);
     lv_obj_set_size(clock_dot_top, 6, 6);
     lv_obj_set_pos(clock_dot_top, 11, 22);
-    lv_obj_set_style_bg_color(clock_dot_top, lv_color_black(), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(clock_dot_top, colors->clock_on, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(clock_dot_top, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_width(clock_dot_top, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(clock_dot_top, 0, LV_PART_MAIN);
@@ -315,7 +313,7 @@ void watchface_start(void)
     clock_dot_bot = lv_obj_create(clock_col_colon);
     lv_obj_set_size(clock_dot_bot, 6, 6);
     lv_obj_set_pos(clock_dot_bot, 11, 52);
-    lv_obj_set_style_bg_color(clock_dot_bot, lv_color_black(), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(clock_dot_bot, colors->clock_on, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(clock_dot_bot, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_width(clock_dot_bot, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(clock_dot_bot, 0, LV_PART_MAIN);
@@ -351,19 +349,19 @@ void watchface_start(void)
     lv_obj_set_style_text_font(date_label, FONT_DATA, LV_PART_MAIN);
     lv_obj_set_style_text_color(date_label, colors->text, LV_PART_MAIN);
     lv_obj_set_style_text_align(date_label, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
-    lv_obj_set_pos(date_label, 15, CLOCK_Y + CLOCK_H + 8);
+    lv_obj_set_pos(date_label, 15, CLOCK_Y + CLOCK_H + 6);
 
     seconds_label = lv_label_create(root_page);
     lv_obj_set_style_text_font(seconds_label, FONT_DATA, LV_PART_MAIN);
     lv_obj_set_style_text_color(seconds_label, colors->data_val, LV_PART_MAIN);
     lv_obj_set_style_text_align(seconds_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
-    lv_obj_set_pos(seconds_label, 185, CLOCK_Y + CLOCK_H + 8);
+    lv_obj_set_pos(seconds_label, 185, CLOCK_Y + CLOCK_H + 6);
     lv_obj_set_width(seconds_label, 40);
 
     /* Three data fields: label on top, value below
      * Row 7: RECOVERY HRS:   LAST HR:   WEEK ACT MIN:
      * Row 8:     5.0           80           0      */
-    int field_top = CLOCK_Y + CLOCK_H + 20;
+    int field_top = CLOCK_Y + CLOCK_H + 16;
     int field_w = 72;
 
     field1_label = lv_label_create(root_page);
@@ -413,7 +411,7 @@ void watchface_start(void)
 
     /* Bottom: icon + 5-digit steps + icon
      * Row 9:  ♥   0 8 5 7 3   🔥   */
-    int bottom_y = field_top + 36;
+    int bottom_y = field_top + 30;
     icon_draw(root_page, ICON_HEART, 30, bottom_y + 2, colors->heart_rate);
 
     bottom5_label = lv_label_create(root_page);
@@ -427,7 +425,7 @@ void watchface_start(void)
 
     /* Battery icon — pixel style
      * Row 10: centered battery icon */
-    int battery_y = bottom_y + 16;
+    int battery_y = bottom_y + 12;
     icon_draw(root_page, ICON_BATTERY_FULL, CENTER_X - 4, battery_y, colors->battery);
 
     watchface_update_time();
@@ -603,6 +601,10 @@ void watchface_switch_theme(void)
     lv_obj_set_style_text_color(clock_lbl_h2, colors->clock_on, LV_PART_MAIN);
     lv_obj_set_style_text_color(clock_lbl_m1, colors->clock_on, LV_PART_MAIN);
     lv_obj_set_style_text_color(clock_lbl_m2, colors->clock_on, LV_PART_MAIN);
+
+    /* Update colon dot colors */
+    lv_obj_set_style_bg_color(clock_dot_top, colors->clock_on, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(clock_dot_bot, colors->clock_on, LV_PART_MAIN);
 
     lv_obj_set_style_text_color(dawn_label, colors->field_lbl, LV_PART_MAIN);
     lv_obj_set_style_text_color(dawn_time_label, colors->data_val, LV_PART_MAIN);
