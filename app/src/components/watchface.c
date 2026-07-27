@@ -69,16 +69,16 @@ static lv_obj_t *clock_col_h2 = NULL;
 static lv_obj_t *clock_col_colon = NULL;
 static lv_obj_t *clock_col_m1 = NULL;
 static lv_obj_t *clock_col_m2 = NULL;
-static lv_obj_t *clock_lbl_bg_h1 = NULL;
-static lv_obj_t *clock_lbl_bg_h2 = NULL;
-static lv_obj_t *clock_lbl_bg_colon = NULL;
-static lv_obj_t *clock_lbl_bg_m1 = NULL;
-static lv_obj_t *clock_lbl_bg_m2 = NULL;
-static lv_obj_t *clock_lbl_fg_h1 = NULL;
-static lv_obj_t *clock_lbl_fg_h2 = NULL;
-static lv_obj_t *clock_lbl_fg_colon = NULL;
-static lv_obj_t *clock_lbl_fg_m1 = NULL;
-static lv_obj_t *clock_lbl_fg_m2 = NULL;
+static lv_obj_t *clock_lbl_digit_h1 = NULL;
+static lv_obj_t *clock_lbl_digit_h2 = NULL;
+static lv_obj_t *clock_lbl_digit_colon = NULL;
+static lv_obj_t *clock_lbl_digit_m1 = NULL;
+static lv_obj_t *clock_lbl_digit_m2 = NULL;
+static lv_obj_t *clock_lbl_grid_h1 = NULL;
+static lv_obj_t *clock_lbl_grid_h2 = NULL;
+static lv_obj_t *clock_lbl_grid_colon = NULL;
+static lv_obj_t *clock_lbl_grid_m1 = NULL;
+static lv_obj_t *clock_lbl_grid_m2 = NULL;
 static lv_obj_t *date_label = NULL;
 static lv_obj_t *seconds_label = NULL;
 
@@ -99,22 +99,20 @@ static lv_timer_t *sensor_timer = NULL;
 
 /* Each clock column uses a 3-layer rendering stack (bottom to top):
  *
- *   Layer 0 (col bg):  solid clock_off (dark green)  →  base background color
- *   Layer 1 (bg label): '#' in black  →  grid lines & dots across the full column
- *   Layer 2 (fg label): digit/':' in clock_on (yellow)  →  digit segments in on-color;
- *                                                          non-segment areas transparent
+ *   Layer 0 (col bg):  solid clock_on (yellow)  →  segment base color
+ *   Layer 1 (fg label): digit/':' in clock_off (dark green)  →  covers non-segment areas
+ *   Layer 2 (grid label): '#' in black  →  grid lines & dots over everything
  *
  * Font glyph layout (lv_font_segments80, 42×80, 4bpp):
- *   - Filled pixels (alpha 15) = solid area, draws with text color
- *   - Transparent pixels (alpha 0) = shows the layer below
- *   - '#' glyph: filled pixels = grid lines & dots pattern across full cell
- *   - digit/':' glyphs: filled pixels = digit segments; non-segment areas are
- *     transparent (cut out), showing the grid/dots and background below.
+ *   - Opaque pixels (alpha 15) = drawn with text color
+ *   - Transparent pixels (alpha 0) = shows layer below
+ *   - '#' glyph: opaque = grid/dot pattern; transparent = gaps between grid
+ *   - digit/':' glyphs: opaque = digit segments; transparent = non-segment areas
  *
  * Final visual result:
- *   Digit segments  → clock_on (yellow) with black grid/dots inside
- *   Non-segment areas → clock_off (dark green) with black grid/dots
- *   Grid lines & dots → black everywhere */
+ *   Inside digit segments  → yellow base + black grid/dots (yellow shows through grid gaps)
+ *   Outside digit segments → dark green + black grid/dots (dark green shows through grid gaps)
+ *   Grid lines & dots everywhere → black (topmost layer) */
 
 /* Column layout: 5 equal columns of 42px with 2px gaps
  * total = 5*42 + 4*2 = 218px, centered in 220px clock width → x offset 1 */
@@ -123,43 +121,43 @@ static lv_timer_t *sensor_timer = NULL;
 #define COL_TOTAL (5 * COL_W + 4 * COL_GAP)
 
 static lv_obj_t *clock_col_create(lv_obj_t *parent, lv_coord_t x, lv_coord_t w,
-                                   const theme_colors_t *colors, const char *bg_char,
-                                   lv_obj_t **bg_out, lv_obj_t **fg_out)
+                                   const theme_colors_t *colors, const char *grid_char,
+                                   lv_obj_t **digit_out, lv_obj_t **grid_out)
 {
     lv_obj_t *col = lv_obj_create(parent);
     lv_obj_set_pos(col, x, 0);
     lv_obj_set_size(col, w, CLOCK_H);
-    lv_obj_set_style_bg_color(col, colors->clock_off, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(col, colors->clock_on, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(col, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_width(col, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(col, 0, LV_PART_MAIN);
     lv_obj_set_style_radius(col, 0, LV_PART_MAIN);
 
-    /* Layer 1 (bg label): '#' in black — its filled pixels draw the
-     * grid lines & dots across the full column; transparent pixels show
-     * the dark green column background. */
-    lv_obj_t *bg = lv_label_create(col);
-    lv_obj_set_style_text_font(bg, &lv_font_segments80, LV_PART_MAIN);
-    lv_obj_set_style_text_color(bg, (lv_color_t)LV_COLOR_MAKE(0x00, 0x00, 0x00), LV_PART_MAIN);
-    lv_obj_set_style_text_align(bg, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
-    lv_obj_set_pos(bg, 0, 0);
-    lv_obj_set_size(bg, w, CLOCK_H);
-    lv_label_set_long_mode(bg, LV_LABEL_LONG_CLIP);
-    lv_label_set_text(bg, bg_char);
+    /* Layer 1 (digit label): digit/colon in clock_off — its opaque pixels
+     * (non-segment areas) cover the yellow background with dark green;
+     * transparent pixels (segment areas) let the yellow show through. */
+    lv_obj_t *digit = lv_label_create(col);
+    lv_obj_set_style_text_font(digit, &lv_font_segments80, LV_PART_MAIN);
+    lv_obj_set_style_text_color(digit, colors->clock_off, LV_PART_MAIN);
+    lv_obj_set_style_text_align(digit, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+    lv_obj_set_pos(digit, 0, 0);
+    lv_obj_set_size(digit, w, CLOCK_H);
+    lv_label_set_long_mode(digit, LV_LABEL_LONG_CLIP);
 
-    /* Layer 2 (fg label): digit/colon in clock_on color — its filled
-     * pixels (digit segments) draw in on-color; non-segment areas are
-     * transparent, showing the grid/dots and background below. */
-    lv_obj_t *fg = lv_label_create(col);
-    lv_obj_set_style_text_font(fg, &lv_font_segments80, LV_PART_MAIN);
-    lv_obj_set_style_text_color(fg, colors->clock_on, LV_PART_MAIN);
-    lv_obj_set_style_text_align(fg, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
-    lv_obj_set_pos(fg, 0, 0);
-    lv_obj_set_size(fg, w, CLOCK_H);
-    lv_label_set_long_mode(fg, LV_LABEL_LONG_CLIP);
+    /* Layer 2 (grid label): '#' in black — its opaque pixels draw the
+     * grid lines & dots over everything; transparent pixels show the
+     * layer below (yellow for segments, dark green for non-segments). */
+    lv_obj_t *grid = lv_label_create(col);
+    lv_obj_set_style_text_font(grid, &lv_font_segments80, LV_PART_MAIN);
+    lv_obj_set_style_text_color(grid, (lv_color_t)LV_COLOR_MAKE(0x00, 0x00, 0x00), LV_PART_MAIN);
+    lv_obj_set_style_text_align(grid, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+    lv_obj_set_pos(grid, 0, 0);
+    lv_obj_set_size(grid, w, CLOCK_H);
+    lv_label_set_long_mode(grid, LV_LABEL_LONG_CLIP);
+    lv_label_set_text(grid, grid_char);
 
-    *bg_out = bg;
-    *fg_out = fg;
+    *digit_out = digit;
+    *grid_out = grid;
     return col;
 }
 
@@ -277,9 +275,9 @@ void watchface_start(void)
     lv_obj_set_pos(weather_label, 0, 48);
 
     /* Large clock — 5 equal columns, 3-layer rendering per column:
-     *   Layer 0 (col bg):  solid clock_off (dark green)  →  base color
-     *   Layer 1 (bg label): '#' in black  →  grid lines & dots
-     *   Layer 2 (fg label): digit/':' in clock_on (yellow)  →  digit segments
+     *   Layer 0 (col bg):  solid clock_on (yellow)  →  segment base
+     *   Layer 1 (digit label): digit/':' in clock_off (dark green)  →  non-segment fill
+     *   Layer 2 (grid label): '#' in black  →  grid/dots over everything
      * The font (lv_font_segments80) includes '#' as full-column grid/dot
      * pattern, digits 0-9, and ':' — all 42×80 with cut-out segments. */
     clock_bg = lv_obj_create(root_page);
@@ -293,22 +291,22 @@ void watchface_start(void)
     /* 5 equal columns: 42px wide, 2px gap, total = 218px, centered in 220px */
     lv_coord_t col_x0 = (CLOCK_W - COL_TOTAL) / 2;
     clock_col_h1 = clock_col_create(clock_bg, col_x0 + 0 * (COL_W + COL_GAP), COL_W,
-                     colors, "#", &clock_lbl_bg_h1, &clock_lbl_fg_h1);
+                     colors, "#", &clock_lbl_digit_h1, &clock_lbl_grid_h1);
     clock_col_h2 = clock_col_create(clock_bg, col_x0 + 1 * (COL_W + COL_GAP), COL_W,
-                     colors, "#", &clock_lbl_bg_h2, &clock_lbl_fg_h2);
+                     colors, "#", &clock_lbl_digit_h2, &clock_lbl_grid_h2);
     clock_col_colon = clock_col_create(clock_bg, col_x0 + 2 * (COL_W + COL_GAP), COL_W,
-                     colors, "#", &clock_lbl_bg_colon, &clock_lbl_fg_colon);
+                     colors, "#", &clock_lbl_digit_colon, &clock_lbl_grid_colon);
     clock_col_m1 = clock_col_create(clock_bg, col_x0 + 3 * (COL_W + COL_GAP), COL_W,
-                     colors, "#", &clock_lbl_bg_m1, &clock_lbl_fg_m1);
+                     colors, "#", &clock_lbl_digit_m1, &clock_lbl_grid_m1);
     clock_col_m2 = clock_col_create(clock_bg, col_x0 + 4 * (COL_W + COL_GAP), COL_W,
-                     colors, "#", &clock_lbl_bg_m2, &clock_lbl_fg_m2);
+                     colors, "#", &clock_lbl_digit_m2, &clock_lbl_grid_m2);
 
-    /* Initial foreground text */
-    lv_label_set_text(clock_lbl_fg_h1, "0");
-    lv_label_set_text(clock_lbl_fg_h2, "0");
-    lv_label_set_text(clock_lbl_fg_colon, ":");
-    lv_label_set_text(clock_lbl_fg_m1, "0");
-    lv_label_set_text(clock_lbl_fg_m2, "0");
+    /* Initial digit text */
+    lv_label_set_text(clock_lbl_digit_h1, "0");
+    lv_label_set_text(clock_lbl_digit_h2, "0");
+    lv_label_set_text(clock_lbl_digit_colon, ":");
+    lv_label_set_text(clock_lbl_digit_m1, "0");
+    lv_label_set_text(clock_lbl_digit_m2, "0");
 
     /* Left stress indicator — height proportional to stress level (0-100) */
     stress_bar = lv_obj_create(root_page);
@@ -444,26 +442,20 @@ void watchface_update_time(void)
     char dig[2];
     dig[0] = '0' + (timeinfo.tm_hour / 10);
     dig[1] = '\0';
-    lv_label_set_text(clock_lbl_fg_h1, dig);
+    lv_label_set_text(clock_lbl_digit_h1, dig);
     dig[0] = '0' + (timeinfo.tm_hour % 10);
-    lv_label_set_text(clock_lbl_fg_h2, dig);
+    lv_label_set_text(clock_lbl_digit_h2, dig);
     dig[0] = '0' + (timeinfo.tm_min / 10);
-    lv_label_set_text(clock_lbl_fg_m1, dig);
+    lv_label_set_text(clock_lbl_digit_m1, dig);
     dig[0] = '0' + (timeinfo.tm_min % 10);
-    lv_label_set_text(clock_lbl_fg_m2, dig);
+    lv_label_set_text(clock_lbl_digit_m2, dig);
 
     /* Colon blink: show on even seconds, hide on odd seconds.
-     * We toggle the fg layer (colon glyph in clock_on color):
-     *   visible → colon dots show in on-color; non-dot areas show dark green
-     *             background with black grid/dots
-     *   hidden  → full column shows dark green background with black grid/dots
-     * The bg layer ('#' in black) stays always visible so the grid/dot
-     * pattern remains consistent whether the colon is on or off. */
-    if (timeinfo.tm_sec % 2 == 0) {
-        lv_obj_clear_flag(clock_lbl_fg_colon, LV_OBJ_FLAG_HIDDEN);
-    } else {
-        lv_obj_add_flag(clock_lbl_fg_colon, LV_OBJ_FLAG_HIDDEN);
-    }
+     * We toggle the colon digit text between ':' and '#':
+     *   ':' → dot areas transparent, showing yellow; non-dot areas dark green
+     *   '#' → full column dark green, matching non-segment background
+     * The black grid layer stays always visible over everything. */
+    lv_label_set_text(clock_lbl_digit_colon, timeinfo.tm_sec % 2 == 0 ? ":" : "#");
 
     char sec_str[8];
     snprintf(sec_str, sizeof(sec_str), "%02d", timeinfo.tm_sec);
@@ -579,23 +571,22 @@ void watchface_switch_theme(void)
     lv_obj_set_style_bg_color(lv_scr_act(), colors->bg, LV_PART_MAIN);
     lv_obj_set_style_bg_color(root_page, colors->bg, LV_PART_MAIN);
 
-    /* Update clock column backgrounds (Layer 0: solid clock_off base) */
-    lv_obj_set_style_bg_color(clock_col_h1, colors->clock_off, LV_PART_MAIN);
-    lv_obj_set_style_bg_color(clock_col_h2, colors->clock_off, LV_PART_MAIN);
-    lv_obj_set_style_bg_color(clock_col_colon, colors->clock_off, LV_PART_MAIN);
-    lv_obj_set_style_bg_color(clock_col_m1, colors->clock_off, LV_PART_MAIN);
-    lv_obj_set_style_bg_color(clock_col_m2, colors->clock_off, LV_PART_MAIN);
+    /* Update clock column backgrounds (Layer 0: solid clock_on — segment base) */
+    lv_obj_set_style_bg_color(clock_col_h1, colors->clock_on, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(clock_col_h2, colors->clock_on, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(clock_col_colon, colors->clock_on, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(clock_col_m1, colors->clock_on, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(clock_col_m2, colors->clock_on, LV_PART_MAIN);
 
-    /* Clock bg labels (Layer 1: '#' in black — grid/dots stay black;
+    /* Update clock digit labels (Layer 1: digit/':' in clock_off — non-segment fill) */
+    lv_obj_set_style_text_color(clock_lbl_digit_h1, colors->clock_off, LV_PART_MAIN);
+    lv_obj_set_style_text_color(clock_lbl_digit_h2, colors->clock_off, LV_PART_MAIN);
+    lv_obj_set_style_text_color(clock_lbl_digit_colon, colors->clock_off, LV_PART_MAIN);
+    lv_obj_set_style_text_color(clock_lbl_digit_m1, colors->clock_off, LV_PART_MAIN);
+    lv_obj_set_style_text_color(clock_lbl_digit_m2, colors->clock_off, LV_PART_MAIN);
+
+    /* Clock grid labels (Layer 2: '#' in black — grid/dots stay black;
      * no color update needed). */
-
-    /* Update clock fg labels (Layer 2: digit/':' in clock_on — digit
-     * segments in on-color; non-segment areas are transparent). */
-    lv_obj_set_style_text_color(clock_lbl_fg_h1, colors->clock_on, LV_PART_MAIN);
-    lv_obj_set_style_text_color(clock_lbl_fg_h2, colors->clock_on, LV_PART_MAIN);
-    lv_obj_set_style_text_color(clock_lbl_fg_colon, colors->clock_on, LV_PART_MAIN);
-    lv_obj_set_style_text_color(clock_lbl_fg_m1, colors->clock_on, LV_PART_MAIN);
-    lv_obj_set_style_text_color(clock_lbl_fg_m2, colors->clock_on, LV_PART_MAIN);
 
     lv_obj_set_style_text_color(dawn_label, colors->field_lbl, LV_PART_MAIN);
     lv_obj_set_style_text_color(dawn_time_label, colors->data_val, LV_PART_MAIN);
