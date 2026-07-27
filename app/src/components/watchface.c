@@ -42,6 +42,10 @@ LOG_MODULE_REGISTER(watchface, LOG_LEVEL_INF);
 #define MATRIX_H (DOT_ROWS * (DOT_H + DOT_GAP) - DOT_GAP)
 #define MATRIX_GAP 4
 
+#define FIELD1_W (3 * MATRIX_W + 2 * MATRIX_GAP)
+#define FIELD2_W (2 * MATRIX_W + MATRIX_GAP)
+#define FIELD3_W (2 * MATRIX_W + MATRIX_GAP)
+
 static const uint8_t dot_font[11][7] = {
     {0x1F, 0x11, 0x11, 0x11, 0x11, 0x11, 0x1F},
     {0x00, 0x12, 0x1F, 0x10, 0x10, 0x10, 0x1F},
@@ -57,8 +61,10 @@ static const uint8_t dot_font[11][7] = {
 };
 
 typedef struct {
-    lv_obj_t *dots[DOT_ROWS][DOT_COLS];
-} dot_matrix_t;
+    lv_obj_t *canvas;
+    lv_color_t buf[FIELD1_W * MATRIX_H];
+    int w;
+} dot_field_t;
 
 static int sim_steps = 8542;
 static int sim_temp = 59;
@@ -112,11 +118,8 @@ static lv_obj_t *date_label = NULL;
 static lv_obj_t *seconds_label = NULL;
 
 static lv_obj_t *field1_label = NULL;
-static lv_obj_t *field1_value = NULL;
 static lv_obj_t *field2_label = NULL;
-static lv_obj_t *field2_value = NULL;
 static lv_obj_t *field3_label = NULL;
-static lv_obj_t *field3_value = NULL;
 
 static lv_obj_t *bottom5_label = NULL;
 
@@ -128,9 +131,9 @@ static bool battery_show_percent = false;
 static lv_obj_t *stress_bar = NULL;
 static lv_obj_t *bodybatt_bar = NULL;
 
-static dot_matrix_t field1_dm[3] = {0};
-static dot_matrix_t field2_dm[2] = {0};
-static dot_matrix_t field3_dm[2] = {0};
+static dot_field_t field1_dm = {0};
+static dot_field_t field2_dm = {0};
+static dot_field_t field3_dm = {0};
 
 static lv_timer_t *time_timer = NULL;
 static lv_timer_t *sensor_timer = NULL;
@@ -199,25 +202,20 @@ static lv_obj_t *clock_col_create(lv_obj_t *parent, lv_coord_t x, lv_coord_t w,
     return col;
 }
 
-static void dot_matrix_create(dot_matrix_t *m, lv_obj_t *parent, int x, int y)
+static void dot_field_create(dot_field_t *f, lv_obj_t *parent, int x, int y, int w)
 {
-    for (int row = 0; row < DOT_ROWS; row++) {
-        for (int col = 0; col < DOT_COLS; col++) {
-            int px = x + col * (DOT_W + DOT_GAP);
-            int py = y + row * (DOT_H + DOT_GAP);
-            
-            m->dots[row][col] = lv_obj_create(parent);
-            lv_obj_set_size(m->dots[row][col], DOT_W, DOT_H);
-            lv_obj_set_pos(m->dots[row][col], px, py);
-            lv_obj_set_style_bg_color(m->dots[row][col], (lv_color_t)LV_COLOR_MAKE(0x08, 0x30, 0x39), LV_PART_MAIN);
-            lv_obj_set_style_bg_opa(m->dots[row][col], LV_OPA_COVER, LV_PART_MAIN);
-            lv_obj_set_style_border_width(m->dots[row][col], 0, LV_PART_MAIN);
-            lv_obj_set_style_radius(m->dots[row][col], 0, LV_PART_MAIN);
-        }
-    }
+    f->w = w;
+    f->canvas = lv_canvas_create(parent);
+    lv_canvas_set_buffer(f->canvas, f->buf, w, MATRIX_H, LV_COLOR_FORMAT_RGB565);
+    lv_obj_set_size(f->canvas, w, MATRIX_H);
+    lv_obj_set_pos(f->canvas, x, y);
+    lv_obj_set_style_bg_opa(f->canvas, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_border_width(f->canvas, 0, LV_PART_MAIN);
+    
+    lv_canvas_fill_bg(f->canvas, (lv_color_t)LV_COLOR_MAKE(0x08, 0x30, 0x39), LV_OPA_COVER);
 }
 
-static void dot_matrix_set(dot_matrix_t *m, int digit)
+static void dot_field_draw_digit(lv_obj_t *canvas, int x_offset, int digit)
 {
     if (digit < 0 || digit > 10) digit = 10;
     
@@ -226,10 +224,43 @@ static void dot_matrix_set(dot_matrix_t *m, int digit)
         for (int col = 0; col < DOT_COLS; col++) {
             bool on = (row_data >> (4 - col)) & 0x01;
             if (on) {
-                lv_obj_set_style_bg_color(m->dots[row][col], (lv_color_t)LV_COLOR_MAKE(0xff, 0xff, 0xff), LV_PART_MAIN);
-            } else {
-                lv_obj_set_style_bg_color(m->dots[row][col], (lv_color_t)LV_COLOR_MAKE(0x08, 0x30, 0x39), LV_PART_MAIN);
+                int px = x_offset + col * (DOT_W + DOT_GAP);
+                int py = row * (DOT_H + DOT_GAP);
+                for (int dx = 0; dx < DOT_W; dx++) {
+                    for (int dy = 0; dy < DOT_H; dy++) {
+                        lv_canvas_set_px(canvas, px + dx, py + dy, 
+                            (lv_color_t)LV_COLOR_MAKE(0xff, 0xff, 0xff), LV_OPA_COVER);
+                    }
+                }
             }
+        }
+    }
+}
+
+static void dot_field_set_value(dot_field_t *f, float value, int decimals)
+{
+    if (!f->canvas) return;
+    
+    lv_canvas_fill_bg(f->canvas, (lv_color_t)LV_COLOR_MAKE(0x08, 0x30, 0x39), LV_OPA_COVER);
+    
+    char buf[8];
+    if (decimals == 1) {
+        snprintf(buf, sizeof(buf), "%2.1f", (double)value);
+    } else {
+        snprintf(buf, sizeof(buf), "%4d", (int)value);
+    }
+    
+    int idx = 0;
+    for (int i = 0; buf[i] != '\0' && idx < 4; i++) {
+        int x_offset = idx * (MATRIX_W + MATRIX_GAP);
+        if (x_offset >= f->w) break;
+        
+        if (buf[i] == '.') {
+            dot_field_draw_digit(f->canvas, x_offset, 10);
+            idx++;
+        } else if (buf[i] >= '0' && buf[i] <= '9') {
+            dot_field_draw_digit(f->canvas, x_offset, buf[i] - '0');
+            idx++;
         }
     }
 }
@@ -434,9 +465,7 @@ void watchface_start(void)
     lv_obj_set_pos(field1_label, 12, field_top);
     lv_obj_set_width(field1_label, field_w);
 
-    dot_matrix_create(&field1_dm[0], root_page, 12, field_top + 14);
-    dot_matrix_create(&field1_dm[1], root_page, 12 + MATRIX_W + MATRIX_GAP, field_top + 14);
-    dot_matrix_create(&field1_dm[2], root_page, 12 + 2 * (MATRIX_W + MATRIX_GAP), field_top + 14);
+    dot_field_create(&field1_dm, root_page, 12, field_top + 14, FIELD1_W);
 
     field2_label = lv_label_create(root_page);
     lv_obj_set_style_text_font(field2_label, FONT_LABEL, LV_PART_MAIN);
@@ -446,8 +475,7 @@ void watchface_start(void)
     lv_obj_set_pos(field2_label, CENTER_X - field_w/2, field_top);
     lv_obj_set_width(field2_label, field_w);
 
-    dot_matrix_create(&field2_dm[0], root_page, CENTER_X - field_w/2 + 10, field_top + 14);
-    dot_matrix_create(&field2_dm[1], root_page, CENTER_X - field_w/2 + 10 + MATRIX_W + MATRIX_GAP, field_top + 14);
+    dot_field_create(&field2_dm, root_page, CENTER_X - field_w/2 + 10, field_top + 14, FIELD2_W);
 
     field3_label = lv_label_create(root_page);
     lv_obj_set_style_text_font(field3_label, FONT_LABEL, LV_PART_MAIN);
@@ -457,8 +485,7 @@ void watchface_start(void)
     lv_obj_set_pos(field3_label, 156, field_top);
     lv_obj_set_width(field3_label, field_w);
 
-    dot_matrix_create(&field3_dm[0], root_page, 186, field_top + 14);
-    dot_matrix_create(&field3_dm[1], root_page, 186 + MATRIX_W + MATRIX_GAP, field_top + 14);
+    dot_field_create(&field3_dm, root_page, 186, field_top + 14, FIELD3_W);
 
     /* Bottom: icon + 5-digit steps + icon
      * Row 9:  ♥   0 8 5 7 3   🔥   */
@@ -644,17 +671,13 @@ void watchface_update_battery(void)
 void watchface_update_sensors(void)
 {
     lv_label_set_text(field1_label, "RECOVERY HRS:");
-    dot_matrix_set(&field1_dm[0], sim_recovery / 10);
-    dot_matrix_set(&field1_dm[1], sim_recovery % 10);
-    dot_matrix_set(&field1_dm[2], 10);
+    dot_field_set_value(&field1_dm, (float)sim_recovery + 0.0f, 1);
 
     lv_label_set_text(field2_label, "LAST HR:");
-    dot_matrix_set(&field2_dm[0], sim_last_hr / 10);
-    dot_matrix_set(&field2_dm[1], sim_last_hr % 10);
+    dot_field_set_value(&field2_dm, (float)sim_last_hr, 0);
 
     lv_label_set_text(field3_label, "WEEK ACT MIN:");
-    dot_matrix_set(&field3_dm[0], sim_week_min / 10);
-    dot_matrix_set(&field3_dm[1], sim_week_min % 10);
+    dot_field_set_value(&field3_dm, (float)sim_week_min, 0);
 
     char steps_str[16];
     snprintf(steps_str, sizeof(steps_str), "%05d", sim_steps);
