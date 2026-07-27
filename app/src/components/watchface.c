@@ -287,7 +287,8 @@ static void dot_field_create(dot_field_t *f, lv_obj_t *parent, int x, int y, int
     f->container = lv_obj_create(parent);
     lv_obj_set_size(f->container, w, MATRIX_H);
     lv_obj_set_pos(f->container, x, y);
-    lv_obj_set_style_bg_opa(f->container, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(f->container, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(f->container, (lv_color_t)LV_COLOR_MAKE(0x00, 0x00, 0x00), LV_PART_MAIN);
     lv_obj_set_style_border_width(f->container, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(f->container, 0, LV_PART_MAIN);
     
