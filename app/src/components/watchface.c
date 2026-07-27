@@ -428,7 +428,7 @@ void watchface_start(void)
     lv_obj_set_pos(battery_container, CENTER_X - battery_w / 2, battery_y);
     lv_obj_set_style_bg_opa(battery_container, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_border_width(battery_container, 1, LV_PART_MAIN);
-    lv_obj_set_style_border_color(battery_container, (lv_color_t)LV_COLOR_MAKE(0x00, 0x00, 0x00), LV_PART_MAIN);
+    lv_obj_set_style_border_color(battery_container, (lv_color_t)LV_COLOR_MAKE(0xa0, 0xa0, 0xa0), LV_PART_MAIN);
     lv_obj_set_style_radius(battery_container, 2, LV_PART_MAIN);
     lv_obj_set_style_pad_all(battery_container, 1, LV_PART_MAIN);
     
@@ -444,7 +444,7 @@ void watchface_start(void)
     lv_obj_t *battery_cap = lv_obj_create(root_page);
     lv_obj_set_size(battery_cap, 3, 6);
     lv_obj_set_pos(battery_cap, CENTER_X + battery_w / 2, battery_y + 3);
-    lv_obj_set_style_bg_color(battery_cap, (lv_color_t)LV_COLOR_MAKE(0x00, 0x00, 0x00), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(battery_cap, (lv_color_t)LV_COLOR_MAKE(0xa0, 0xa0, 0xa0), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(battery_cap, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_radius(battery_cap, 1, LV_PART_MAIN);
     lv_obj_set_style_border_width(battery_cap, 0, LV_PART_MAIN);
