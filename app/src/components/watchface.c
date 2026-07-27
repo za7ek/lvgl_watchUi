@@ -231,7 +231,7 @@ void watchface_start(void)
      * Row 2 (y=22): 01:18  [1QTR]  03:13 */
     dawn_label = lv_label_create(root_page);
     lv_obj_set_style_text_font(dawn_label, FONT_LABEL, LV_PART_MAIN);
-    lv_obj_set_style_text_color(dawn_label, colors->field_lbl, LV_PART_MAIN);
+    lv_obj_set_style_text_color(dawn_label, (lv_color_t)LV_COLOR_MAKE(0x52, 0xaa, 0xac), LV_PART_MAIN);
     lv_obj_set_style_text_align(dawn_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
     lv_obj_set_pos(dawn_label, 20, 6);
     lv_obj_set_width(dawn_label, 65);
@@ -252,7 +252,7 @@ void watchface_start(void)
 
     dusk_label = lv_label_create(root_page);
     lv_obj_set_style_text_font(dusk_label, FONT_LABEL, LV_PART_MAIN);
-    lv_obj_set_style_text_color(dusk_label, colors->field_lbl, LV_PART_MAIN);
+    lv_obj_set_style_text_color(dusk_label, (lv_color_t)LV_COLOR_MAKE(0x52, 0xaa, 0xac), LV_PART_MAIN);
     lv_obj_set_style_text_align(dusk_label, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
     lv_obj_set_pos(dusk_label, 155, 6);
     lv_obj_set_width(dusk_label, 65);
@@ -362,7 +362,7 @@ void watchface_start(void)
 
     field1_label = lv_label_create(root_page);
     lv_obj_set_style_text_font(field1_label, FONT_LABEL, LV_PART_MAIN);
-    lv_obj_set_style_text_color(field1_label, colors->field_lbl, LV_PART_MAIN);
+    lv_obj_set_style_text_color(field1_label, (lv_color_t)LV_COLOR_MAKE(0x52, 0xaa, 0xac), LV_PART_MAIN);
     lv_obj_set_style_text_align(field1_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     lv_label_set_long_mode(field1_label, LV_LABEL_LONG_CLIP);
     lv_obj_set_pos(field1_label, 12, field_top);
@@ -377,7 +377,7 @@ void watchface_start(void)
 
     field2_label = lv_label_create(root_page);
     lv_obj_set_style_text_font(field2_label, FONT_LABEL, LV_PART_MAIN);
-    lv_obj_set_style_text_color(field2_label, colors->field_lbl, LV_PART_MAIN);
+    lv_obj_set_style_text_color(field2_label, (lv_color_t)LV_COLOR_MAKE(0x52, 0xaa, 0xac), LV_PART_MAIN);
     lv_obj_set_style_text_align(field2_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     lv_label_set_long_mode(field2_label, LV_LABEL_LONG_CLIP);
     lv_obj_set_pos(field2_label, CENTER_X - field_w/2, field_top);
@@ -392,7 +392,7 @@ void watchface_start(void)
 
     field3_label = lv_label_create(root_page);
     lv_obj_set_style_text_font(field3_label, FONT_LABEL, LV_PART_MAIN);
-    lv_obj_set_style_text_color(field3_label, colors->field_lbl, LV_PART_MAIN);
+    lv_obj_set_style_text_color(field3_label, (lv_color_t)LV_COLOR_MAKE(0x52, 0xaa, 0xac), LV_PART_MAIN);
     lv_obj_set_style_text_align(field3_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     lv_label_set_long_mode(field3_label, LV_LABEL_LONG_CLIP);
     lv_obj_set_pos(field3_label, 156, field_top);
@@ -668,9 +668,9 @@ void watchface_switch_theme(void)
     /* Clock grid labels (Layer 2: '#' in black — grid/dots stay black;
      * no color update needed). */
 
-    lv_obj_set_style_text_color(dawn_label, colors->field_lbl, LV_PART_MAIN);
+    lv_obj_set_style_text_color(dawn_label, (lv_color_t)LV_COLOR_MAKE(0x52, 0xaa, 0xac), LV_PART_MAIN);
     lv_obj_set_style_text_color(dawn_time_label, colors->data_val, LV_PART_MAIN);
-    lv_obj_set_style_text_color(dusk_label, colors->field_lbl, LV_PART_MAIN);
+    lv_obj_set_style_text_color(dusk_label, (lv_color_t)LV_COLOR_MAKE(0x52, 0xaa, 0xac), LV_PART_MAIN);
     lv_obj_set_style_text_color(dusk_time_label, colors->data_val, LV_PART_MAIN);
     lv_obj_set_style_text_color(moon_label, colors->moon, LV_PART_MAIN);
     lv_obj_set_style_text_color(temp_label, colors->text, LV_PART_MAIN);
@@ -678,11 +678,11 @@ void watchface_switch_theme(void)
     lv_obj_set_style_text_color(date_label, colors->clock_on, LV_PART_MAIN);
     lv_obj_set_style_text_color(seconds_label, colors->data_val, LV_PART_MAIN);
 
-    lv_obj_set_style_text_color(field1_label, colors->field_lbl, LV_PART_MAIN);
+    lv_obj_set_style_text_color(field1_label, (lv_color_t)LV_COLOR_MAKE(0x52, 0xaa, 0xac), LV_PART_MAIN);
     lv_obj_set_style_text_color(field1_value, colors->heart_rate, LV_PART_MAIN);
-    lv_obj_set_style_text_color(field2_label, colors->field_lbl, LV_PART_MAIN);
+    lv_obj_set_style_text_color(field2_label, (lv_color_t)LV_COLOR_MAKE(0x52, 0xaa, 0xac), LV_PART_MAIN);
     lv_obj_set_style_text_color(field2_value, colors->steps, LV_PART_MAIN);
-    lv_obj_set_style_text_color(field3_label, colors->field_lbl, LV_PART_MAIN);
+    lv_obj_set_style_text_color(field3_label, (lv_color_t)LV_COLOR_MAKE(0x52, 0xaa, 0xac), LV_PART_MAIN);
     lv_obj_set_style_text_color(field3_value, colors->accent, LV_PART_MAIN);
 
     lv_obj_set_style_text_color(bottom5_label, colors->clock_on, LV_PART_MAIN);
