@@ -205,7 +205,7 @@ static lv_obj_t *clock_col_create(lv_obj_t *parent, lv_coord_t x, lv_coord_t w,
 static void dotmatrix_draw_event_cb(lv_event_t *e)
 {
     lv_obj_t *obj = lv_event_get_target(e);
-    lv_draw_ctx_t *ctx = lv_event_get_draw_ctx(e);
+    lv_layer_t *layer = lv_event_get_layer(e);
     lv_obj_draw_part_dsc_t *dsc = lv_event_get_draw_part_dsc(e);
     
     if (dsc->part == LV_PART_MAIN && dsc->draw_stage == LV_DRAW_STAGE_POST) {
@@ -231,7 +231,7 @@ static void dotmatrix_draw_event_cb(lv_event_t *e)
                     area.x2 = dot_x + DOTMATRIX_DOT_W - 1;
                     area.y2 = dot_y + DOTMATRIX_DOT_H - 1;
                     
-                    lv_draw_rect(ctx, &rect_dsc, &area);
+                    lv_draw_rect(layer, &rect_dsc, &area);
                 }
             }
         }
