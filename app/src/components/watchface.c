@@ -69,8 +69,8 @@ static const uint8_t dotmatrix_font[11][7] = {
 };
 
 typedef struct {
-    lv_obj_t *container;
-    lv_obj_t *dots[DOTMATRIX_ROWS][DOTMATRIX_COLS];
+    lv_obj_t *canvas;
+    lv_color_t *buf;
 } dotmatrix_matrix_t;
 
 typedef struct {
@@ -205,43 +205,41 @@ static lv_obj_t *clock_col_create(lv_obj_t *parent, lv_coord_t x, lv_coord_t w,
 static void dotmatrix_matrix_create(dotmatrix_matrix_t *matrix, lv_obj_t *parent,
                                     int x, int y, const theme_colors_t *colors)
 {
-    matrix->container = lv_obj_create(parent);
-    lv_obj_set_size(matrix->container, DOTMATRIX_W, DOTMATRIX_H);
-    lv_obj_set_pos(matrix->container, x, y);
-    lv_obj_set_style_bg_color(matrix->container, (lv_color_t)LV_COLOR_MAKE(0x08, 0x30, 0x39), LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(matrix->container, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_border_width(matrix->container, 0, LV_PART_MAIN);
-    lv_obj_set_style_pad_all(matrix->container, 0, LV_PART_MAIN);
+    matrix->buf = lv_mem_alloc(DOTMATRIX_W * DOTMATRIX_H * sizeof(lv_color_t));
+    if (!matrix->buf) return;
     
-    for (int row = 0; row < DOTMATRIX_ROWS; row++) {
-        for (int col = 0; col < DOTMATRIX_COLS; col++) {
-            int dot_x = col * (DOTMATRIX_DOT_W + DOTMATRIX_GAP_X);
-            int dot_y = row * (DOTMATRIX_DOT_H + DOTMATRIX_GAP_Y);
-            
-            matrix->dots[row][col] = lv_obj_create(matrix->container);
-            lv_obj_set_size(matrix->dots[row][col], DOTMATRIX_DOT_W, DOTMATRIX_DOT_H);
-            lv_obj_set_pos(matrix->dots[row][col], dot_x, dot_y);
-            lv_obj_set_style_bg_color(matrix->dots[row][col], (lv_color_t)LV_COLOR_MAKE(0x08, 0x30, 0x39), LV_PART_MAIN);
-            lv_obj_set_style_bg_opa(matrix->dots[row][col], LV_OPA_COVER, LV_PART_MAIN);
-            lv_obj_set_style_border_width(matrix->dots[row][col], 0, LV_PART_MAIN);
-            lv_obj_set_style_radius(matrix->dots[row][col], 0, LV_PART_MAIN);
-        }
-    }
+    matrix->canvas = lv_canvas_create(parent);
+    lv_canvas_set_buffer(matrix->canvas, matrix->buf, DOTMATRIX_W, DOTMATRIX_H, LV_COLOR_FORMAT_RGB565);
+    lv_obj_set_pos(matrix->canvas, x, y);
+    lv_obj_set_size(matrix->canvas, DOTMATRIX_W, DOTMATRIX_H);
+    lv_obj_set_style_bg_opa(matrix->canvas, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_border_width(matrix->canvas, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(matrix->canvas, 0, LV_PART_MAIN);
+    
+    lv_canvas_fill_bg(matrix->canvas, (lv_color_t)LV_COLOR_MAKE(0x08, 0x30, 0x39), LV_OPA_COVER);
 }
 
 static void dotmatrix_matrix_set_digit(dotmatrix_matrix_t *matrix, int digit)
 {
+    if (!matrix->canvas || !matrix->buf) return;
     if (digit < 0 || digit > 10) digit = 10;
     
+    lv_canvas_fill_bg(matrix->canvas, (lv_color_t)LV_COLOR_MAKE(0x08, 0x30, 0x39), LV_OPA_COVER);
+    
     for (int row = 0; row < DOTMATRIX_ROWS; row++) {
+        uint8_t row_data = dotmatrix_font[digit][row];
         for (int col = 0; col < DOTMATRIX_COLS; col++) {
-            uint8_t row_data = dotmatrix_font[digit][row];
             bool dot_on = (row_data >> (4 - col)) & 0x01;
             
             if (dot_on) {
-                lv_obj_set_style_bg_color(matrix->dots[row][col], (lv_color_t)LV_COLOR_MAKE(0xff, 0xff, 0xff), LV_PART_MAIN);
-            } else {
-                lv_obj_set_style_bg_color(matrix->dots[row][col], (lv_color_t)LV_COLOR_MAKE(0x08, 0x30, 0x39), LV_PART_MAIN);
+                int dot_x = col * (DOTMATRIX_DOT_W + DOTMATRIX_GAP_X);
+                int dot_y = row * (DOTMATRIX_DOT_H + DOTMATRIX_GAP_Y);
+                for (int dx = 0; dx < DOTMATRIX_DOT_W; dx++) {
+                    for (int dy = 0; dy < DOTMATRIX_DOT_H; dy++) {
+                        lv_canvas_set_px(matrix->canvas, dot_x + dx, dot_y + dy, 
+                            (lv_color_t)LV_COLOR_MAKE(0xff, 0xff, 0xff), LV_OPA_COVER);
+                    }
+                }
             }
         }
     }
@@ -261,7 +259,7 @@ static void dotmatrix_field_create(dotmatrix_field_t *field, lv_obj_t *parent,
 static void dotmatrix_field_set_value(dotmatrix_field_t *field, float value, int decimals)
 {
     for (int i = 0; i < 4; i++) {
-        if (field->matrices[i].container != NULL) {
+        if (field->matrices[i].canvas != NULL) {
             dotmatrix_matrix_set_digit(&field->matrices[i], 10);
         }
     }
@@ -275,7 +273,7 @@ static void dotmatrix_field_set_value(dotmatrix_field_t *field, float value, int
     
     int idx = 0;
     for (int i = 0; buf[i] != '\0' && idx < 4; i++) {
-        if (field->matrices[idx].container == NULL) break;
+        if (field->matrices[idx].canvas == NULL) break;
         
         if (buf[i] == '.') {
             dotmatrix_matrix_set_digit(&field->matrices[idx], 10);
