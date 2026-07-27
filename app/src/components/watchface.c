@@ -413,9 +413,9 @@ void watchface_start(void)
     icon_draw(root_page, ICON_CALORIES, 200, bottom_y + 2, colors->accent);
 
     /* Battery icon — pixel style
-     * Row 10: centered battery icon */
-    int battery_y = bottom_y + 12;
-    icon_draw(root_page, ICON_BATTERY_FULL, CENTER_X - 4, battery_y, colors->battery);
+     * Row 10: bottom right corner, near seconds */
+    int battery_y = SCREEN_H - 16;
+    icon_draw(root_page, ICON_BATTERY_FULL, SCREEN_W - 16, battery_y, colors->battery);
 
     watchface_update_time();
     watchface_update_date();
