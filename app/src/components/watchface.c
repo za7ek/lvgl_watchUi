@@ -202,17 +202,21 @@ static lv_obj_t *clock_col_create(lv_obj_t *parent, lv_coord_t x, lv_coord_t w,
     return col;
 }
 
-static void dot_field_draw_bg(lv_layer_t *layer, int x_offset)
+static void dot_field_draw_bg(lv_layer_t *layer, int x_offset, int base_x, int base_y)
 {
     lv_draw_rect_dsc_t rect_dsc;
     lv_draw_rect_dsc_init(&rect_dsc);
+    rect_dsc.base.layer = layer;
     rect_dsc.bg_color = (lv_color_t)LV_COLOR_MAKE(0x08, 0x30, 0x39);
     rect_dsc.bg_opa = LV_OPA_COVER;
+    rect_dsc.border_opa = LV_OPA_TRANSP;
+    rect_dsc.outline_opa = LV_OPA_TRANSP;
+    rect_dsc.shadow_opa = LV_OPA_TRANSP;
     
     for (int row = 0; row < DOT_ROWS; row++) {
         for (int col = 0; col < DOT_COLS; col++) {
-            int px = x_offset + col * (DOT_W + DOT_GAP);
-            int py = row * (DOT_H + DOT_GAP);
+            int px = base_x + x_offset + col * (DOT_W + DOT_GAP);
+            int py = base_y + row * (DOT_H + DOT_GAP);
             
             lv_area_t area;
             area.x1 = px;
@@ -225,22 +229,26 @@ static void dot_field_draw_bg(lv_layer_t *layer, int x_offset)
     }
 }
 
-static void dot_field_draw_digit(lv_layer_t *layer, int x_offset, int digit)
+static void dot_field_draw_digit(lv_layer_t *layer, int x_offset, int digit, int base_x, int base_y)
 {
     if (digit < 0 || digit > 10) digit = 10;
     
     lv_draw_rect_dsc_t rect_dsc;
     lv_draw_rect_dsc_init(&rect_dsc);
+    rect_dsc.base.layer = layer;
     rect_dsc.bg_color = (lv_color_t)LV_COLOR_MAKE(0xff, 0xff, 0xff);
     rect_dsc.bg_opa = LV_OPA_COVER;
+    rect_dsc.border_opa = LV_OPA_TRANSP;
+    rect_dsc.outline_opa = LV_OPA_TRANSP;
+    rect_dsc.shadow_opa = LV_OPA_TRANSP;
     
     for (int row = 0; row < DOT_ROWS; row++) {
         uint8_t row_data = dot_font[digit][row];
         for (int col = 0; col < DOT_COLS; col++) {
             bool on = (row_data >> (4 - col)) & 0x01;
             if (on) {
-                int px = x_offset + col * (DOT_W + DOT_GAP);
-                int py = row * (DOT_H + DOT_GAP);
+                int px = base_x + x_offset + col * (DOT_W + DOT_GAP);
+                int py = base_y + row * (DOT_H + DOT_GAP);
                 
                 lv_area_t area;
                 area.x1 = px;
@@ -256,9 +264,15 @@ static void dot_field_draw_digit(lv_layer_t *layer, int x_offset, int digit)
 
 static void dot_field_draw_event_cb(lv_event_t *e)
 {
-    lv_obj_t *obj = lv_event_get_target(e);
+    lv_obj_t *obj = lv_event_get_current_target(e);
     lv_layer_t *layer = lv_event_get_layer(e);
     dot_field_t *f = (dot_field_t *)lv_obj_get_user_data(obj);
+    
+    if (!f) return;
+    
+    /* Use absolute screen coordinates for drawing (LVGL v9 requirement) */
+    int base_x = obj->coords.x1;
+    int base_y = obj->coords.y1;
     
     char buf[8];
     if (f->decimals == 1) {
@@ -271,13 +285,13 @@ static void dot_field_draw_event_cb(lv_event_t *e)
     for (int i = 0; buf[i] != '\0' && idx < 4; i++) {
         int x_offset = idx * (MATRIX_W + MATRIX_GAP);
         
-        dot_field_draw_bg(layer, x_offset);
+        dot_field_draw_bg(layer, x_offset, base_x, base_y);
         
         if (buf[i] >= '0' && buf[i] <= '9') {
-            dot_field_draw_digit(layer, x_offset, buf[i] - '0');
+            dot_field_draw_digit(layer, x_offset, buf[i] - '0', base_x, base_y);
             idx++;
         } else if (buf[i] == '.') {
-            dot_field_draw_digit(layer, x_offset, 10);
+            dot_field_draw_digit(layer, x_offset, 10, base_x, base_y);
         }
     }
 }
@@ -287,8 +301,7 @@ static void dot_field_create(dot_field_t *f, lv_obj_t *parent, int x, int y, int
     f->container = lv_obj_create(parent);
     lv_obj_set_size(f->container, w, MATRIX_H);
     lv_obj_set_pos(f->container, x, y);
-    lv_obj_set_style_bg_opa(f->container, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_bg_color(f->container, (lv_color_t)LV_COLOR_MAKE(0x00, 0x00, 0x00), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(f->container, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_border_width(f->container, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(f->container, 0, LV_PART_MAIN);
     
