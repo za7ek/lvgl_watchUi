@@ -261,7 +261,9 @@ static void dotmatrix_field_create(dotmatrix_field_t *field, lv_obj_t *parent,
 static void dotmatrix_field_set_value(dotmatrix_field_t *field, float value, int decimals)
 {
     for (int i = 0; i < 4; i++) {
-        dotmatrix_matrix_set_digit(&field->matrices[i], 10);
+        if (field->matrices[i].container != NULL) {
+            dotmatrix_matrix_set_digit(&field->matrices[i], 10);
+        }
     }
     
     char buf[8];
@@ -273,6 +275,8 @@ static void dotmatrix_field_set_value(dotmatrix_field_t *field, float value, int
     
     int idx = 0;
     for (int i = 0; buf[i] != '\0' && idx < 4; i++) {
+        if (field->matrices[idx].container == NULL) break;
+        
         if (buf[i] == '.') {
             dotmatrix_matrix_set_digit(&field->matrices[idx], 10);
             idx++;
