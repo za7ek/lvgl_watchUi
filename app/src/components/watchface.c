@@ -432,13 +432,12 @@ void watchface_start(void)
     lv_obj_set_style_border_width(battery_container, 1, LV_PART_MAIN);
     lv_obj_set_style_border_color(battery_container, (lv_color_t)LV_COLOR_MAKE(0xa0, 0xa0, 0xa0), LV_PART_MAIN);
     lv_obj_set_style_radius(battery_container, 2, LV_PART_MAIN);
-    lv_obj_set_style_pad_all(battery_container, 1, LV_PART_MAIN);
-    lv_obj_set_style_layout(battery_container, LV_LAYOUT_FLEX, LV_PART_MAIN);
-    lv_obj_set_style_flex_align(battery_container, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(battery_container, 0, LV_PART_MAIN);
     
     battery_fill = lv_obj_create(battery_container);
-    lv_obj_set_height(battery_fill, LV_SIZE_CONTENT);
+    lv_obj_set_height(battery_fill, battery_h - 2);
     lv_obj_set_width(battery_fill, 0);
+    lv_obj_set_pos(battery_fill, 1, 1);
     lv_obj_set_style_bg_color(battery_fill, colors->battery, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(battery_fill, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_radius(battery_fill, 1, LV_PART_MAIN);
@@ -450,6 +449,8 @@ void watchface_start(void)
     lv_obj_set_style_text_color(battery_label, (lv_color_t)LV_COLOR_MAKE(0x00, 0x00, 0x00), LV_PART_MAIN);
     lv_obj_set_style_text_align(battery_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     lv_obj_set_style_pad_all(battery_label, 0, LV_PART_MAIN);
+    lv_obj_set_size(battery_label, battery_w, battery_h);
+    lv_obj_set_style_bg_opa(battery_label, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_add_flag(battery_label, LV_OBJ_FLAG_HIDDEN);
     
     /* Battery cap */
