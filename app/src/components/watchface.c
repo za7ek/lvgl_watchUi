@@ -42,6 +42,7 @@ static int sim_last_hr = 80;
 static int sim_week_min = 0;
 static int sim_stress = 45;
 static int sim_bodybatt = 68;
+static int sim_battery = 85;
 
 static int sunrise_hour = 1, sunrise_min = 18;
 static int sunset_hour = 3, sunset_min = 13;
@@ -53,6 +54,7 @@ static void sim_update_data(void)
     sim_last_hr = 75 + (rand() % 15);
     sim_stress = 30 + (rand() % 50);
     sim_bodybatt = 40 + (rand() % 50);
+    sim_battery = 15 + (rand() % 85);
 }
 
 static lv_obj_t *root_page = NULL;
@@ -90,6 +92,9 @@ static lv_obj_t *field3_label = NULL;
 static lv_obj_t *field3_value = NULL;
 
 static lv_obj_t *bottom5_label = NULL;
+
+static lv_obj_t *battery_container = NULL;
+static lv_obj_t *battery_fill = NULL;
 
 static lv_obj_t *stress_bar = NULL;
 static lv_obj_t *bodybatt_bar = NULL;
@@ -412,10 +417,37 @@ void watchface_start(void)
 
     icon_draw(root_page, ICON_CALORIES, 200, bottom_y + 2, colors->accent);
 
-    /* Battery icon — pixel style
-     * Row 10: bottom right corner, near seconds */
-    int battery_y = SCREEN_H - 16;
-    icon_draw(root_page, ICON_BATTERY_FULL, SCREEN_W - 16, battery_y, colors->battery);
+    /* Battery icon — dynamic with fill based on battery level
+     * Row 10: centered at bottom, showing battery level 0-100% */
+    int battery_y = SCREEN_H - 14;
+    int battery_w = 24;
+    int battery_h = 12;
+    
+    battery_container = lv_obj_create(root_page);
+    lv_obj_set_size(battery_container, battery_w, battery_h);
+    lv_obj_set_pos(battery_container, CENTER_X - battery_w / 2, battery_y);
+    lv_obj_set_style_bg_opa(battery_container, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_border_width(battery_container, 1, LV_PART_MAIN);
+    lv_obj_set_style_border_color(battery_container, (lv_color_t)LV_COLOR_MAKE(0x00, 0x00, 0x00), LV_PART_MAIN);
+    lv_obj_set_style_radius(battery_container, 2, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(battery_container, 1, LV_PART_MAIN);
+    
+    battery_fill = lv_obj_create(battery_container);
+    lv_obj_set_height(battery_fill, LV_SIZE_CONTENT);
+    lv_obj_set_width(battery_fill, 0);
+    lv_obj_set_style_bg_color(battery_fill, colors->battery, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(battery_fill, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_radius(battery_fill, 1, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(battery_fill, 0, LV_PART_MAIN);
+    
+    /* Battery cap */
+    lv_obj_t *battery_cap = lv_obj_create(root_page);
+    lv_obj_set_size(battery_cap, 3, 6);
+    lv_obj_set_pos(battery_cap, CENTER_X + battery_w / 2, battery_y + 3);
+    lv_obj_set_style_bg_color(battery_cap, (lv_color_t)LV_COLOR_MAKE(0x00, 0x00, 0x00), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(battery_cap, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_radius(battery_cap, 1, LV_PART_MAIN);
+    lv_obj_set_style_border_width(battery_cap, 0, LV_PART_MAIN);
 
     watchface_update_time();
     watchface_update_date();
@@ -510,6 +542,20 @@ void watchface_update_weather(void)
     lv_label_set_text(weather_label, "PARTLY CLOUDY");
 }
 
+void watchface_update_battery(void)
+{
+    if (!battery_fill) return;
+    
+    int battery_level = sim_battery;
+    if (battery_level < 0) battery_level = 0;
+    if (battery_level > 100) battery_level = 100;
+    
+    int fill_w = (battery_level * 20) / 100;
+    if (fill_w < 1 && battery_level > 0) fill_w = 1;
+    
+    lv_obj_set_width(battery_fill, fill_w);
+}
+
 void watchface_update_sensors(void)
 {
     lv_label_set_text(field1_label, "RECOVERY HRS:");
@@ -544,6 +590,7 @@ void watchface_update_sensors(void)
     lv_obj_set_y(bodybatt_bar, CLOCK_Y + CLOCK_H - bodybatt_h);
 
     watchface_update_weather();
+    watchface_update_battery();
 }
 
 void watchface_switch_language(void)
