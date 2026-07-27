@@ -450,12 +450,9 @@ void watchface_update_time(void)
     dig[0] = '0' + (timeinfo.tm_min % 10);
     lv_label_set_text(clock_lbl_digit_m2, dig);
 
-    /* Colon blink: show on even seconds, hide on odd seconds.
-     * We toggle the colon digit text between ':' and '#':
-     *   ':' → dot areas transparent, showing yellow; non-dot areas dark green
-     *   '#' → full column dark green, matching non-segment background
-     * The black grid layer stays always visible over everything. */
-    lv_label_set_text(clock_lbl_digit_colon, timeinfo.tm_sec % 2 == 0 ? ":" : "#");
+    /* Colon always visible — dot areas transparent showing yellow,
+     * non-dot areas dark green. The black grid layer stays always visible. */
+    lv_label_set_text(clock_lbl_digit_colon, ":");
 
     char sec_str[8];
     snprintf(sec_str, sizeof(sec_str), "%02d", timeinfo.tm_sec);
