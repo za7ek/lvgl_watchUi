@@ -435,12 +435,12 @@ void watchface_start(void)
     lv_obj_set_style_pad_all(battery_container, 0, LV_PART_MAIN);
     
     battery_fill = lv_obj_create(battery_container);
-    lv_obj_set_height(battery_fill, battery_h - 2);
+    lv_obj_set_height(battery_fill, battery_h - 4);
     lv_obj_set_width(battery_fill, 0);
-    lv_obj_set_pos(battery_fill, 1, 1);
+    lv_obj_set_pos(battery_fill, 2, 2);
     lv_obj_set_style_bg_color(battery_fill, colors->battery, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(battery_fill, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_radius(battery_fill, 1, LV_PART_MAIN);
+    lv_obj_set_style_radius(battery_fill, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(battery_fill, 0, LV_PART_MAIN);
     
     battery_label = lv_label_create(battery_container);
