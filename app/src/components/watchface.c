@@ -61,9 +61,9 @@ static const uint8_t dot_font[11][7] = {
 };
 
 typedef struct {
-    lv_obj_t *canvas;
-    lv_color_t buf[FIELD1_W * MATRIX_H];
-    int w;
+    lv_obj_t *container;
+    float value;
+    int decimals;
 } dot_field_t;
 
 static int sim_steps = 8542;
@@ -202,22 +202,14 @@ static lv_obj_t *clock_col_create(lv_obj_t *parent, lv_coord_t x, lv_coord_t w,
     return col;
 }
 
-static void dot_field_create(dot_field_t *f, lv_obj_t *parent, int x, int y, int w)
-{
-    f->w = w;
-    f->canvas = lv_canvas_create(parent);
-    lv_canvas_set_buffer(f->canvas, f->buf, w, MATRIX_H, LV_COLOR_FORMAT_RGB565);
-    lv_obj_set_size(f->canvas, w, MATRIX_H);
-    lv_obj_set_pos(f->canvas, x, y);
-    lv_obj_set_style_bg_opa(f->canvas, LV_OPA_TRANSP, LV_PART_MAIN);
-    lv_obj_set_style_border_width(f->canvas, 0, LV_PART_MAIN);
-    
-    lv_canvas_fill_bg(f->canvas, (lv_color_t)LV_COLOR_MAKE(0x08, 0x30, 0x39), LV_OPA_COVER);
-}
-
-static void dot_field_draw_digit(lv_obj_t *canvas, int x_offset, int digit)
+static void dot_field_draw_digit(lv_layer_t *layer, int x_offset, int digit)
 {
     if (digit < 0 || digit > 10) digit = 10;
+    
+    lv_draw_rect_dsc_t rect_dsc;
+    lv_draw_rect_dsc_init(&rect_dsc);
+    rect_dsc.bg_color = (lv_color_t)LV_COLOR_MAKE(0xff, 0xff, 0xff);
+    rect_dsc.bg_opa = LV_OPA_COVER;
     
     for (int row = 0; row < DOT_ROWS; row++) {
         uint8_t row_data = dot_font[digit][row];
@@ -226,43 +218,69 @@ static void dot_field_draw_digit(lv_obj_t *canvas, int x_offset, int digit)
             if (on) {
                 int px = x_offset + col * (DOT_W + DOT_GAP);
                 int py = row * (DOT_H + DOT_GAP);
-                for (int dx = 0; dx < DOT_W; dx++) {
-                    for (int dy = 0; dy < DOT_H; dy++) {
-                        lv_canvas_set_px(canvas, px + dx, py + dy, 
-                            (lv_color_t)LV_COLOR_MAKE(0xff, 0xff, 0xff), LV_OPA_COVER);
-                    }
-                }
+                
+                lv_area_t area;
+                area.x1 = px;
+                area.y1 = py;
+                area.x2 = px + DOT_W - 1;
+                area.y2 = py + DOT_H - 1;
+                
+                lv_draw_rect(layer, &rect_dsc, &area);
             }
         }
     }
 }
 
-static void dot_field_set_value(dot_field_t *f, float value, int decimals)
+static void dot_field_draw_event_cb(lv_event_t *e)
 {
-    if (!f->canvas) return;
-    
-    lv_canvas_fill_bg(f->canvas, (lv_color_t)LV_COLOR_MAKE(0x08, 0x30, 0x39), LV_OPA_COVER);
+    lv_obj_t *obj = lv_event_get_target(e);
+    lv_layer_t *layer = lv_event_get_layer(e);
+    dot_field_t *f = (dot_field_t *)lv_obj_get_user_data(obj);
     
     char buf[8];
-    if (decimals == 1) {
-        snprintf(buf, sizeof(buf), "%2.1f", (double)value);
+    if (f->decimals == 1) {
+        snprintf(buf, sizeof(buf), "%2.1f", (double)f->value);
     } else {
-        snprintf(buf, sizeof(buf), "%4d", (int)value);
+        snprintf(buf, sizeof(buf), "%4d", (int)f->value);
     }
     
     int idx = 0;
     for (int i = 0; buf[i] != '\0' && idx < 4; i++) {
         int x_offset = idx * (MATRIX_W + MATRIX_GAP);
-        if (x_offset >= f->w) break;
         
         if (buf[i] == '.') {
-            dot_field_draw_digit(f->canvas, x_offset, 10);
+            dot_field_draw_digit(layer, x_offset, 10);
             idx++;
         } else if (buf[i] >= '0' && buf[i] <= '9') {
-            dot_field_draw_digit(f->canvas, x_offset, buf[i] - '0');
+            dot_field_draw_digit(layer, x_offset, buf[i] - '0');
             idx++;
         }
     }
+}
+
+static void dot_field_create(dot_field_t *f, lv_obj_t *parent, int x, int y, int w)
+{
+    f->container = lv_obj_create(parent);
+    lv_obj_set_size(f->container, w, MATRIX_H);
+    lv_obj_set_pos(f->container, x, y);
+    lv_obj_set_style_bg_color(f->container, (lv_color_t)LV_COLOR_MAKE(0x08, 0x30, 0x39), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(f->container, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_border_width(f->container, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(f->container, 0, LV_PART_MAIN);
+    
+    f->value = 0;
+    f->decimals = 0;
+    lv_obj_set_user_data(f->container, f);
+    lv_obj_add_event_cb(f->container, dot_field_draw_event_cb, LV_EVENT_DRAW_POST, NULL);
+}
+
+static void dot_field_set_value(dot_field_t *f, float value, int decimals)
+{
+    if (!f->container) return;
+    
+    f->value = value;
+    f->decimals = decimals;
+    lv_obj_invalidate(f->container);
 }
 
 static const char *get_moon_string(int phase)
