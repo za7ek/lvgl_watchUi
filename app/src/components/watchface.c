@@ -57,7 +57,7 @@ static const uint8_t dot_font[11][7] = {
     {0x1F, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10},
     {0x1F, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x1F},
     {0x1F, 0x11, 0x11, 0x1F, 0x10, 0x10, 0x10},
-    {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10},
+    {0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0x06},
 };
 
 typedef struct {
@@ -202,6 +202,29 @@ static lv_obj_t *clock_col_create(lv_obj_t *parent, lv_coord_t x, lv_coord_t w,
     return col;
 }
 
+static void dot_field_draw_bg(lv_layer_t *layer, int x_offset)
+{
+    lv_draw_rect_dsc_t rect_dsc;
+    lv_draw_rect_dsc_init(&rect_dsc);
+    rect_dsc.bg_color = (lv_color_t)LV_COLOR_MAKE(0x08, 0x30, 0x39);
+    rect_dsc.bg_opa = LV_OPA_COVER;
+    
+    for (int row = 0; row < DOT_ROWS; row++) {
+        for (int col = 0; col < DOT_COLS; col++) {
+            int px = x_offset + col * (DOT_W + DOT_GAP);
+            int py = row * (DOT_H + DOT_GAP);
+            
+            lv_area_t area;
+            area.x1 = px;
+            area.y1 = py;
+            area.x2 = px + DOT_W - 1;
+            area.y2 = py + DOT_H - 1;
+            
+            lv_draw_rect(layer, &rect_dsc, &area);
+        }
+    }
+}
+
 static void dot_field_draw_digit(lv_layer_t *layer, int x_offset, int digit)
 {
     if (digit < 0 || digit > 10) digit = 10;
@@ -239,21 +262,22 @@ static void dot_field_draw_event_cb(lv_event_t *e)
     
     char buf[8];
     if (f->decimals == 1) {
-        snprintf(buf, sizeof(buf), "%2.1f", (double)f->value);
+        snprintf(buf, sizeof(buf), "%.1f", (double)f->value);
     } else {
-        snprintf(buf, sizeof(buf), "%4d", (int)f->value);
+        snprintf(buf, sizeof(buf), "%d", (int)f->value);
     }
     
     int idx = 0;
     for (int i = 0; buf[i] != '\0' && idx < 4; i++) {
         int x_offset = idx * (MATRIX_W + MATRIX_GAP);
         
-        if (buf[i] == '.') {
-            dot_field_draw_digit(layer, x_offset, 10);
-            idx++;
-        } else if (buf[i] >= '0' && buf[i] <= '9') {
+        dot_field_draw_bg(layer, x_offset);
+        
+        if (buf[i] >= '0' && buf[i] <= '9') {
             dot_field_draw_digit(layer, x_offset, buf[i] - '0');
             idx++;
+        } else if (buf[i] == '.') {
+            dot_field_draw_digit(layer, x_offset, 10);
         }
     }
 }
@@ -263,8 +287,7 @@ static void dot_field_create(dot_field_t *f, lv_obj_t *parent, int x, int y, int
     f->container = lv_obj_create(parent);
     lv_obj_set_size(f->container, w, MATRIX_H);
     lv_obj_set_pos(f->container, x, y);
-    lv_obj_set_style_bg_color(f->container, (lv_color_t)LV_COLOR_MAKE(0x08, 0x30, 0x39), LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(f->container, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(f->container, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_border_width(f->container, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(f->container, 0, LV_PART_MAIN);
     
