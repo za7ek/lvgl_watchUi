@@ -266,7 +266,7 @@ static void dotmatrix_field_set_value(dotmatrix_field_t *field, float value, int
     
     char buf[8];
     if (decimals == 1) {
-        snprintf(buf, sizeof(buf), "%2.1f", value);
+        snprintf(buf, sizeof(buf), "%2.1f", (double)value);
     } else {
         snprintf(buf, sizeof(buf), "%4d", (int)value);
     }
