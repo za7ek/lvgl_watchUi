@@ -69,8 +69,8 @@ static const uint8_t dotmatrix_font[11][7] = {
 };
 
 typedef struct {
-    lv_obj_t *canvas;
-    lv_color_t *buf;
+    lv_obj_t *container;
+    int current_digit;
 } dotmatrix_matrix_t;
 
 typedef struct {
@@ -202,47 +202,65 @@ static lv_obj_t *clock_col_create(lv_obj_t *parent, lv_coord_t x, lv_coord_t w,
     return col;
 }
 
-static void dotmatrix_matrix_create(dotmatrix_matrix_t *matrix, lv_obj_t *parent,
-                                    int x, int y, const theme_colors_t *colors)
+static void dotmatrix_draw_event_cb(lv_event_t *e)
 {
-    matrix->buf = lv_mem_alloc(DOTMATRIX_W * DOTMATRIX_H * sizeof(lv_color_t));
-    if (!matrix->buf) return;
+    lv_obj_t *obj = lv_event_get_target(e);
+    lv_draw_ctx_t *ctx = lv_event_get_draw_ctx(e);
+    lv_obj_draw_part_dsc_t *dsc = lv_event_get_draw_part_dsc(e);
     
-    matrix->canvas = lv_canvas_create(parent);
-    lv_canvas_set_buffer(matrix->canvas, matrix->buf, DOTMATRIX_W, DOTMATRIX_H, LV_COLOR_FORMAT_RGB565);
-    lv_obj_set_pos(matrix->canvas, x, y);
-    lv_obj_set_size(matrix->canvas, DOTMATRIX_W, DOTMATRIX_H);
-    lv_obj_set_style_bg_opa(matrix->canvas, LV_OPA_TRANSP, LV_PART_MAIN);
-    lv_obj_set_style_border_width(matrix->canvas, 0, LV_PART_MAIN);
-    lv_obj_set_style_pad_all(matrix->canvas, 0, LV_PART_MAIN);
-    
-    lv_canvas_fill_bg(matrix->canvas, (lv_color_t)LV_COLOR_MAKE(0x08, 0x30, 0x39), LV_OPA_COVER);
-}
-
-static void dotmatrix_matrix_set_digit(dotmatrix_matrix_t *matrix, int digit)
-{
-    if (!matrix->canvas || !matrix->buf) return;
-    if (digit < 0 || digit > 10) digit = 10;
-    
-    lv_canvas_fill_bg(matrix->canvas, (lv_color_t)LV_COLOR_MAKE(0x08, 0x30, 0x39), LV_OPA_COVER);
-    
-    for (int row = 0; row < DOTMATRIX_ROWS; row++) {
-        uint8_t row_data = dotmatrix_font[digit][row];
-        for (int col = 0; col < DOTMATRIX_COLS; col++) {
-            bool dot_on = (row_data >> (4 - col)) & 0x01;
-            
-            if (dot_on) {
-                int dot_x = col * (DOTMATRIX_DOT_W + DOTMATRIX_GAP_X);
-                int dot_y = row * (DOTMATRIX_DOT_H + DOTMATRIX_GAP_Y);
-                for (int dx = 0; dx < DOTMATRIX_DOT_W; dx++) {
-                    for (int dy = 0; dy < DOTMATRIX_DOT_H; dy++) {
-                        lv_canvas_set_px(matrix->canvas, dot_x + dx, dot_y + dy, 
-                            (lv_color_t)LV_COLOR_MAKE(0xff, 0xff, 0xff), LV_OPA_COVER);
-                    }
+    if (dsc->part == LV_PART_MAIN && dsc->draw_stage == LV_DRAW_STAGE_POST) {
+        int digit = *(int *)lv_obj_get_user_data(obj);
+        
+        lv_draw_rect_dsc_t rect_dsc;
+        lv_draw_rect_dsc_init(&rect_dsc);
+        rect_dsc.bg_color = (lv_color_t)LV_COLOR_MAKE(0xff, 0xff, 0xff);
+        rect_dsc.bg_opa = LV_OPA_COVER;
+        
+        for (int row = 0; row < DOTMATRIX_ROWS; row++) {
+            uint8_t row_data = dotmatrix_font[digit][row];
+            for (int col = 0; col < DOTMATRIX_COLS; col++) {
+                bool dot_on = (row_data >> (4 - col)) & 0x01;
+                
+                if (dot_on) {
+                    int dot_x = col * (DOTMATRIX_DOT_W + DOTMATRIX_GAP_X);
+                    int dot_y = row * (DOTMATRIX_DOT_H + DOTMATRIX_GAP_Y);
+                    
+                    lv_area_t area;
+                    area.x1 = dot_x;
+                    area.y1 = dot_y;
+                    area.x2 = dot_x + DOTMATRIX_DOT_W - 1;
+                    area.y2 = dot_y + DOTMATRIX_DOT_H - 1;
+                    
+                    lv_draw_rect(ctx, &rect_dsc, &area);
                 }
             }
         }
     }
+}
+
+static void dotmatrix_matrix_create(dotmatrix_matrix_t *matrix, lv_obj_t *parent,
+                                    int x, int y, const theme_colors_t *colors)
+{
+    matrix->container = lv_obj_create(parent);
+    lv_obj_set_size(matrix->container, DOTMATRIX_W, DOTMATRIX_H);
+    lv_obj_set_pos(matrix->container, x, y);
+    lv_obj_set_style_bg_color(matrix->container, (lv_color_t)LV_COLOR_MAKE(0x08, 0x30, 0x39), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(matrix->container, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_border_width(matrix->container, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(matrix->container, 0, LV_PART_MAIN);
+    
+    matrix->current_digit = 10;
+    lv_obj_set_user_data(matrix->container, &matrix->current_digit);
+    lv_obj_add_event_cb(matrix->container, dotmatrix_draw_event_cb, LV_EVENT_DRAW_PART_END, NULL);
+}
+
+static void dotmatrix_matrix_set_digit(dotmatrix_matrix_t *matrix, int digit)
+{
+    if (!matrix->container) return;
+    if (digit < 0 || digit > 10) digit = 10;
+    
+    matrix->current_digit = digit;
+    lv_obj_invalidate(matrix->container);
 }
 
 static void dotmatrix_field_create(dotmatrix_field_t *field, lv_obj_t *parent,
