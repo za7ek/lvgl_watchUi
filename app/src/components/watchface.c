@@ -95,6 +95,8 @@ static lv_obj_t *bottom5_label = NULL;
 
 static lv_obj_t *battery_container = NULL;
 static lv_obj_t *battery_fill = NULL;
+static lv_obj_t *battery_label = NULL;
+static bool battery_show_percent = false;
 
 static lv_obj_t *stress_bar = NULL;
 static lv_obj_t *bodybatt_bar = NULL;
@@ -431,6 +433,8 @@ void watchface_start(void)
     lv_obj_set_style_border_color(battery_container, (lv_color_t)LV_COLOR_MAKE(0xa0, 0xa0, 0xa0), LV_PART_MAIN);
     lv_obj_set_style_radius(battery_container, 2, LV_PART_MAIN);
     lv_obj_set_style_pad_all(battery_container, 1, LV_PART_MAIN);
+    lv_obj_set_style_layout(battery_container, LV_LAYOUT_FLEX, LV_PART_MAIN);
+    lv_obj_set_style_flex_align(battery_container, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_PART_MAIN);
     
     battery_fill = lv_obj_create(battery_container);
     lv_obj_set_height(battery_fill, LV_SIZE_CONTENT);
@@ -439,6 +443,14 @@ void watchface_start(void)
     lv_obj_set_style_bg_opa(battery_fill, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_radius(battery_fill, 1, LV_PART_MAIN);
     lv_obj_set_style_pad_all(battery_fill, 0, LV_PART_MAIN);
+    
+    battery_label = lv_label_create(battery_container);
+    lv_label_set_text(battery_label, "");
+    lv_obj_set_style_text_font(battery_label, &lv_font_montserrat_8, LV_PART_MAIN);
+    lv_obj_set_style_text_color(battery_label, (lv_color_t)LV_COLOR_MAKE(0x00, 0x00, 0x00), LV_PART_MAIN);
+    lv_obj_set_style_text_align(battery_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(battery_label, 0, LV_PART_MAIN);
+    lv_obj_add_flag(battery_label, LV_OBJ_FLAG_HIDDEN);
     
     /* Battery cap */
     lv_obj_t *battery_cap = lv_obj_create(root_page);
@@ -554,6 +566,23 @@ void watchface_update_battery(void)
     if (fill_w < 1 && battery_level > 0) fill_w = 1;
     
     lv_obj_set_width(battery_fill, fill_w);
+    
+    if (battery_level <= 10) {
+        lv_obj_set_style_bg_color(battery_fill, (lv_color_t)LV_COLOR_MAKE(0xff, 0x00, 0x00), LV_PART_MAIN);
+    } else if (battery_level >= 90) {
+        lv_obj_set_style_bg_color(battery_fill, (lv_color_t)LV_COLOR_MAKE(0x00, 0xff, 0x00), LV_PART_MAIN);
+    } else {
+        lv_obj_set_style_bg_color(battery_fill, (lv_color_t)LV_COLOR_MAKE(0xff, 0xff, 0xff), LV_PART_MAIN);
+    }
+    
+    if (battery_show_percent) {
+        char percent_str[4];
+        snprintf(percent_str, sizeof(percent_str), "%d", battery_level);
+        lv_label_set_text(battery_label, percent_str);
+        lv_obj_clear_flag(battery_label, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_add_flag(battery_label, LV_OBJ_FLAG_HIDDEN);
+    }
 }
 
 void watchface_update_sensors(void)
@@ -590,6 +619,12 @@ void watchface_update_sensors(void)
     lv_obj_set_y(bodybatt_bar, CLOCK_Y + CLOCK_H - bodybatt_h);
 
     watchface_update_weather();
+    watchface_update_battery();
+}
+
+void watchface_switch_battery_display(void)
+{
+    battery_show_percent = !battery_show_percent;
     watchface_update_battery();
 }
 
