@@ -35,11 +35,11 @@ LOG_MODULE_REGISTER(watchface, LOG_LEVEL_INF);
 #define FONT_BIG    &lv_font_cjk_16
 #define FONT_LED    &lv_font_led
 
-#define LED_DIGIT_W 18
-#define LED_FIELD_GAP 8
-#define FIELD1_DIGITS 3
-#define FIELD2_DIGITS 2
-#define FIELD3_DIGITS 2
+#define LED_DIGIT_W 14
+#define LED_FIELD_GAP 6
+#define FIELD1_DIGITS 4
+#define FIELD2_DIGITS 4
+#define FIELD3_DIGITS 4
 
 #define FIELD1_W (FIELD1_DIGITS * LED_DIGIT_W + (FIELD1_DIGITS - 1) * LED_FIELD_GAP)
 #define FIELD2_W (FIELD2_DIGITS * LED_DIGIT_W + (FIELD2_DIGITS - 1) * LED_FIELD_GAP)
@@ -220,19 +220,24 @@ static void led_field_set_value(lv_obj_t *bg, lv_obj_t *val, int digits, float v
     if (decimals == 1) {
         snprintf(val_buf, sizeof(val_buf), "%.1f", (double)value);
         int total_chars = strlen(val_buf);
+        int pad = digits - total_chars;
         
         for (int i = 0; i < digits; i++) {
-            if (i < total_chars && val_buf[i] != '\0') {
-                bg_buf[i] = (val_buf[i] == '.') ? '.' : '#';
-            } else {
+            if (i < pad) {
                 bg_buf[i] = ' ';
+                val_buf[i] = ' ';
+            } else {
+                int src_idx = i - pad;
+                if (src_idx < total_chars) {
+                    bg_buf[i] = (val_buf[src_idx] == '.') ? '.' : '#';
+                    val_buf[i] = val_buf[src_idx];
+                } else {
+                    bg_buf[i] = ' ';
+                    val_buf[i] = ' ';
+                }
             }
         }
         bg_buf[digits] = '\0';
-        
-        for (int i = total_chars; i < digits; i++) {
-            val_buf[i] = ' ';
-        }
         val_buf[digits] = '\0';
     } else {
         int int_val = (int)value;
@@ -244,7 +249,9 @@ static void led_field_set_value(lv_obj_t *bg, lv_obj_t *val, int digits, float v
                 bg_buf[i] = ' ';
                 val_buf[i] = ' ';
             } else {
+                int src_idx = i - (digits - total_chars);
                 bg_buf[i] = '#';
+                val_buf[i] = val_buf[src_idx];
             }
         }
         bg_buf[digits] = '\0';
@@ -447,36 +454,41 @@ void watchface_start(void)
     int field_top = CLOCK_Y + CLOCK_H + 16;
     int field_h = 20;
     int label_h = 12;
+    int field_gap = (SCREEN_W - 3 * FIELD1_W) / 4;
+    
+    int field1_x = field_gap;
+    int field2_x = field_gap * 2 + FIELD1_W;
+    int field3_x = field_gap * 3 + FIELD1_W * 2 + field_gap;
     
     field1_label = lv_label_create(root_page);
     lv_obj_set_style_text_font(field1_label, FONT_LABEL, LV_PART_MAIN);
     lv_obj_set_style_text_color(field1_label, (lv_color_t)LV_COLOR_MAKE(0x52, 0xaa, 0xac), LV_PART_MAIN);
-    lv_obj_set_style_text_align(field1_label, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
+    lv_obj_set_style_text_align(field1_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     lv_label_set_long_mode(field1_label, LV_LABEL_LONG_CLIP);
-    lv_obj_set_pos(field1_label, 12, field_top);
-    lv_obj_set_width(field1_label, FIELD1_W * 2);
+    lv_obj_set_pos(field1_label, field1_x, field_top);
+    lv_obj_set_width(field1_label, FIELD1_W);
 
-    led_field_create(root_page, 12, field_top + label_h + 2, FIELD1_W, field_h, &field1_bg, &field1_val);
+    led_field_create(root_page, field1_x, field_top + label_h + 2, FIELD1_W, field_h, &field1_bg, &field1_val);
 
     field2_label = lv_label_create(root_page);
     lv_obj_set_style_text_font(field2_label, FONT_LABEL, LV_PART_MAIN);
     lv_obj_set_style_text_color(field2_label, (lv_color_t)LV_COLOR_MAKE(0x52, 0xaa, 0xac), LV_PART_MAIN);
     lv_obj_set_style_text_align(field2_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     lv_label_set_long_mode(field2_label, LV_LABEL_LONG_CLIP);
-    lv_obj_set_pos(field2_label, CENTER_X - FIELD2_W, field_top);
-    lv_obj_set_width(field2_label, FIELD2_W * 2);
+    lv_obj_set_pos(field2_label, field2_x, field_top);
+    lv_obj_set_width(field2_label, FIELD2_W);
 
-    led_field_create(root_page, CENTER_X - FIELD2_W/2, field_top + label_h + 2, FIELD2_W, field_h, &field2_bg, &field2_val);
+    led_field_create(root_page, field2_x, field_top + label_h + 2, FIELD2_W, field_h, &field2_bg, &field2_val);
 
     field3_label = lv_label_create(root_page);
     lv_obj_set_style_text_font(field3_label, FONT_LABEL, LV_PART_MAIN);
     lv_obj_set_style_text_color(field3_label, (lv_color_t)LV_COLOR_MAKE(0x52, 0xaa, 0xac), LV_PART_MAIN);
-    lv_obj_set_style_text_align(field3_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
+    lv_obj_set_style_text_align(field3_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     lv_label_set_long_mode(field3_label, LV_LABEL_LONG_CLIP);
-    lv_obj_set_pos(field3_label, SCREEN_W - FIELD3_W * 2 - 12, field_top);
-    lv_obj_set_width(field3_label, FIELD3_W * 2);
+    lv_obj_set_pos(field3_label, field3_x, field_top);
+    lv_obj_set_width(field3_label, FIELD3_W);
 
-    led_field_create(root_page, SCREEN_W - FIELD3_W - 12, field_top + label_h + 2, FIELD3_W, field_h, &field3_bg, &field3_val);
+    led_field_create(root_page, field3_x, field_top + label_h + 2, FIELD3_W, field_h, &field3_bg, &field3_val);
 
     /* Bottom: icon + 5-digit steps + icon
      * Row 9:  ♥   0 8 5 7 3   🔥   */
@@ -661,13 +673,13 @@ void watchface_update_battery(void)
 
 void watchface_update_sensors(void)
 {
-    lv_label_set_text(field1_label, "RECOVERY HRS:");
+    lv_label_set_text(field1_label, "REC HRS:");
     led_field_set_value(field1_bg, field1_val, FIELD1_DIGITS, (float)sim_recovery + 0.0f, 1);
 
     lv_label_set_text(field2_label, "LAST HR:");
     led_field_set_value(field2_bg, field2_val, FIELD2_DIGITS, (float)sim_last_hr, 0);
 
-    lv_label_set_text(field3_label, "WEEK ACT MIN:");
+    lv_label_set_text(field3_label, "WK ACT:");
     led_field_set_value(field3_bg, field3_val, FIELD3_DIGITS, (float)sim_week_min, 0);
 
     char steps_str[16];

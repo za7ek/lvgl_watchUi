@@ -58,6 +58,59 @@ def extract_bitmap(img, char_info):
     
     return bitmap
 
+def create_dot_bitmap(target_w=14, target_h=20):
+    """Create a dot bitmap showing 4 small dots (2x2 array) in the center"""
+    bitmap = [[0] * target_w for _ in range(target_h)]
+    
+    # Dot size: 2x2 pixels each
+    # Positions: 2 dots horizontally, 2 dots vertically
+    # Center the dots in the target area
+    
+    dot_size = 2
+    dot1_col = (target_w // 2) - 3  # Left dot column
+    dot2_col = (target_w // 2) + 1  # Right dot column
+    dot1_row = (target_h // 2) - 2  # Top dot row
+    dot2_row = (target_h // 2) + 1  # Bottom dot row
+    
+    # Draw top-left dot
+    for r in range(dot_size):
+        for c in range(dot_size):
+            bitmap[dot1_row + r][dot1_col + c] = 1
+    
+    # Draw top-right dot
+    for r in range(dot_size):
+        for c in range(dot_size):
+            bitmap[dot1_row + r][dot2_col + c] = 1
+    
+    # Draw bottom-left dot
+    for r in range(dot_size):
+        for c in range(dot_size):
+            bitmap[dot2_row + r][dot1_col + c] = 1
+    
+    # Draw bottom-right dot
+    for r in range(dot_size):
+        for c in range(dot_size):
+            bitmap[dot2_row + r][dot2_col + c] = 1
+    
+    return bitmap
+
+def expand_bitmap(bitmap, target_w):
+    """Expand bitmap to target width by adding padding on both sides"""
+    h = len(bitmap)
+    w = len(bitmap[0]) if h > 0 else 0
+    
+    if w >= target_w:
+        return bitmap
+    
+    new_bitmap = [[0] * target_w for _ in range(h)]
+    pad_left = (target_w - w) // 2
+    
+    for row in range(h):
+        for col in range(w):
+            new_bitmap[row][col + pad_left] = bitmap[row][col]
+    
+    return new_bitmap
+
 def bitmap_to_lvgl_data(bitmap):
     h = len(bitmap)
     w = len(bitmap[0]) if h > 0 else 0
@@ -107,22 +160,53 @@ def main():
     
     for glyph_idx, cid in enumerate(sorted_ids):
         info = selected_chars[cid]
-        bitmap = extract_bitmap(img, info)
-        data = bitmap_to_lvgl_data(bitmap)
         
-        w = info['w']
-        h = info['h']
+        if cid == 46:  # '.' character - use custom dot bitmap
+            w = 14
+            h = 20
+            bitmap = create_dot_bitmap(w, h)
+            data = bitmap_to_lvgl_data(bitmap)
+            
+            glyph_dsc = {
+                'bitmap_index': len(bitmap_data),
+                'adv_w': w * 10,
+                'box_w': w,
+                'box_h': h,
+                'ofs_x': 0,
+                'ofs_y': 0
+            }
+        elif cid in [49, 58]:  # '1' and ':' - expand to 14 pixels wide
+            w = 14
+            h = info['h']
+            bitmap = extract_bitmap(img, info)
+            bitmap = expand_bitmap(bitmap, w)
+            data = bitmap_to_lvgl_data(bitmap)
+            
+            glyph_dsc = {
+                'bitmap_index': len(bitmap_data),
+                'adv_w': w * 10,
+                'box_w': w,
+                'box_h': h,
+                'ofs_x': 0,
+                'ofs_y': -info['yoff']
+            }
+        else:
+            bitmap = extract_bitmap(img, info)
+            data = bitmap_to_lvgl_data(bitmap)
+            
+            w = info['w']
+            h = info['h']
+            
+            glyph_dsc = {
+                'bitmap_index': len(bitmap_data),
+                'adv_w': info['xadv'] * 10,
+                'box_w': w,
+                'box_h': h,
+                'ofs_x': info['xoff'],
+                'ofs_y': -info['yoff']
+            }
         
-        glyph_dsc = {
-            'bitmap_index': len(bitmap_data),
-            'adv_w': info['xadv'] * 10,
-            'box_w': w,
-            'box_h': h,
-            'ofs_x': info['xoff'],
-            'ofs_y': -info['yoff']
-        }
         glyph_dscs.append(glyph_dsc)
-        
         bitmap_data.extend(data)
         print(f"  Char id={cid} (glyph {glyph_idx}): {w}x{h}, {len(data)} bytes, bitmap_index={glyph_dsc['bitmap_index']}")
     
