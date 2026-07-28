@@ -355,7 +355,7 @@ void watchface_start(void)
     lv_obj_set_style_outline_width(dawn_label, 0, LV_PART_MAIN);
     lv_obj_set_style_shadow_width(dawn_label, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(dawn_label, 0, LV_PART_MAIN);
-    lv_obj_set_pos(dawn_label, 56, 8);
+    lv_obj_set_pos(dawn_label, 64, 8);
     lv_obj_set_width(dawn_label, 40);
 
     dawn_time_label = lv_label_create(root_page);
@@ -366,7 +366,7 @@ void watchface_start(void)
     lv_obj_set_style_outline_width(dawn_time_label, 0, LV_PART_MAIN);
     lv_obj_set_style_shadow_width(dawn_time_label, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(dawn_time_label, 0, LV_PART_MAIN);
-    lv_obj_set_pos(dawn_time_label, 56, 19);
+    lv_obj_set_pos(dawn_time_label, 64, 19);
     lv_obj_set_width(dawn_time_label, 40);
 
     moon_label = lv_label_create(root_page);
@@ -377,8 +377,8 @@ void watchface_start(void)
     lv_obj_set_style_outline_width(moon_label, 0, LV_PART_MAIN);
     lv_obj_set_style_shadow_width(moon_label, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(moon_label, 0, LV_PART_MAIN);
-    lv_obj_set_pos(moon_label, CENTER_X - 22, 13);
-    lv_obj_set_width(moon_label, 44);
+    lv_obj_set_pos(moon_label, CENTER_X - 16, 13);
+    lv_obj_set_width(moon_label, 32);
     lv_label_set_long_mode(moon_label, LV_LABEL_LONG_CLIP);   /* 强制单行不换行 */
 
     dusk_label = lv_label_create(root_page);
@@ -389,7 +389,7 @@ void watchface_start(void)
     lv_obj_set_style_outline_width(dusk_label, 0, LV_PART_MAIN);
     lv_obj_set_style_shadow_width(dusk_label, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(dusk_label, 0, LV_PART_MAIN);
-    lv_obj_set_pos(dusk_label, 144, 8);
+    lv_obj_set_pos(dusk_label, 136, 8);
     lv_obj_set_width(dusk_label, 40);
 
     dusk_time_label = lv_label_create(root_page);
@@ -400,7 +400,7 @@ void watchface_start(void)
     lv_obj_set_style_outline_width(dusk_time_label, 0, LV_PART_MAIN);
     lv_obj_set_style_shadow_width(dusk_time_label, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(dusk_time_label, 0, LV_PART_MAIN);
-    lv_obj_set_pos(dusk_time_label, 144, 19);
+    lv_obj_set_pos(dusk_time_label, 136, 19);
     lv_obj_set_width(dusk_time_label, 40);
 
     /* Weather: temp line + description line
