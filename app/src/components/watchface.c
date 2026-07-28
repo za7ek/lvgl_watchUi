@@ -12,6 +12,8 @@
 #include "lv_font_cjk.h"
 #include "lv_font_segments80.h"
 #include "lv_font_led.h"
+#include "lv_font_led_small.h"
+#include "lv_font_xsmol.h"
 #include <lvgl.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
@@ -29,8 +31,8 @@ LOG_MODULE_REGISTER(watchface, LOG_LEVEL_INF);
 #define CLOCK_X 10
 #define CLOCK_Y 66
 
-#define FONT_LABEL  &lv_font_montserrat_8
-#define FONT_DATA   &lv_font_montserrat_10
+#define FONT_LABEL  &lv_font_xsmol
+#define FONT_DATA   &lv_font_led_small
 #define FONT_MED    &lv_font_montserrat_12
 #define FONT_BIG    &lv_font_cjk_16
 #define FONT_LED    &lv_font_led
@@ -447,32 +449,35 @@ void watchface_start(void)
     lv_obj_set_style_radius(bodybatt_bar, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(bodybatt_bar, 0, LV_PART_MAIN);
 
-    /* Date line + seconds
-     * Row 6: MON, 5 MAY 2025        32 */
+    /* Date line + seconds — full width matching clock
+     * Row 6: MON, 5 MAY 2025         32 */
     date_label = lv_label_create(root_page);
     lv_obj_set_style_text_font(date_label, FONT_DATA, LV_PART_MAIN);
     lv_obj_set_style_text_color(date_label, colors->text, LV_PART_MAIN);
     lv_obj_set_style_text_align(date_label, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
-    lv_obj_set_pos(date_label, 15, CLOCK_Y + CLOCK_H + 6);
+    lv_obj_set_pos(date_label, CLOCK_X, CLOCK_Y + CLOCK_H + 6);
+    lv_obj_set_width(date_label, CLOCK_W);
 
     seconds_label = lv_label_create(root_page);
     lv_obj_set_style_text_font(seconds_label, FONT_DATA, LV_PART_MAIN);
     lv_obj_set_style_text_color(seconds_label, colors->data_val, LV_PART_MAIN);
     lv_obj_set_style_text_align(seconds_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
-    lv_obj_set_pos(seconds_label, 185, CLOCK_Y + CLOCK_H + 6);
-    lv_obj_set_width(seconds_label, 40);
+    lv_obj_set_pos(seconds_label, CLOCK_X + CLOCK_W - 30, CLOCK_Y + CLOCK_H + 6);
+    lv_obj_set_width(seconds_label, 30);
 
     /* Three data fields: label on top, LED font value below
      * Row 7: RECOVERY HRS:   LAST HR:   WEEK ACT MIN:
      * Row 8:     5.0           80           0      */
-    int field_top = CLOCK_Y + CLOCK_H + 16;
+    int field_top = CLOCK_Y + CLOCK_H + 22;
     int field_h = LED_DIGIT_H;
-    int label_h = 12;
-    int field_gap = (SCREEN_W - 3 * FIELD1_W) / 4;
+    int label_h = 10;
+    int field_gap = 3;
+    int total_field_w = 3 * FIELD1_W + 2 * field_gap;
+    int field_start_x = CENTER_X - total_field_w / 2;
     
-    int field1_x = field_gap;
-    int field2_x = field_gap * 2 + FIELD1_W;
-    int field3_x = field_gap * 3 + FIELD1_W * 2 + field_gap;
+    int field1_x = field_start_x;
+    int field2_x = field_start_x + FIELD1_W + field_gap;
+    int field3_x = field_start_x + 2 * (FIELD1_W + field_gap);
     
     field1_label = lv_label_create(root_page);
     lv_obj_set_style_text_font(field1_label, FONT_LABEL, LV_PART_MAIN);
@@ -593,10 +598,6 @@ void watchface_update_time(void)
     /* Colon always visible — dot areas transparent showing yellow,
      * non-dot areas dark green. The black grid layer stays always visible. */
     lv_label_set_text(clock_lbl_digit_colon, ":");
-
-    char sec_str[8];
-    snprintf(sec_str, sizeof(sec_str), "%02d", timeinfo.tm_sec);
-    lv_label_set_text(seconds_label, sec_str);
 }
 
 void watchface_update_date(void)
@@ -613,11 +614,16 @@ void watchface_update_date(void)
     }
 
     char date_str[48];
+    int day_of_year = timeinfo.tm_yday + 1;
     snprintf(date_str, sizeof(date_str), "%s, %d %s %d",
              weekday_str, timeinfo.tm_mday,
              locale_get_string(LOCALE_STR_JANUARY + timeinfo.tm_mon),
              timeinfo.tm_year + 1900);
     lv_label_set_text(date_label, date_str);
+
+    char day_num_str[16];
+    snprintf(day_num_str, sizeof(day_num_str), "%d", day_of_year);
+    lv_label_set_text(seconds_label, day_num_str);
 
     int moon_phase = get_moon_phase(timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday);
 
@@ -762,7 +768,7 @@ void watchface_switch_theme(void)
     lv_obj_set_style_text_color(moon_label, colors->moon, LV_PART_MAIN);
     lv_obj_set_style_text_color(temp_label, colors->text, LV_PART_MAIN);
     lv_obj_set_style_text_color(weather_label, colors->weather, LV_PART_MAIN);
-    lv_obj_set_style_text_color(date_label, colors->clock_on, LV_PART_MAIN);
+    lv_obj_set_style_text_color(date_label, colors->text, LV_PART_MAIN);
     lv_obj_set_style_text_color(seconds_label, colors->data_val, LV_PART_MAIN);
 
     lv_obj_set_style_text_color(field1_label, (lv_color_t)LV_COLOR_MAKE(0x52, 0xaa, 0xac), LV_PART_MAIN);

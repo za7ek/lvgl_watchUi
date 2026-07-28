@@ -14,6 +14,8 @@ target_sources(app PRIVATE
     src/fonts/lv_font_cjk.c
     src/fonts/lv_font_segments80.c
     src/fonts/lv_font_led.c
+    src/fonts/lv_font_led_small.c
+    src/fonts/lv_font_xsmol.c
 )
 
 target_include_directories(app PRIVATE
