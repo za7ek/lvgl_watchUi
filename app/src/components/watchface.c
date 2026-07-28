@@ -49,6 +49,14 @@ LOG_MODULE_REGISTER(watchface, LOG_LEVEL_INF);
 #define DOT_BG_COLOR  ((lv_color_t)LV_COLOR_MAKE(0x08, 0x30, 0x39))
 #define DOT_FG_COLOR  ((lv_color_t)LV_COLOR_MAKE(0xff, 0xff, 0xff))
 
+#define FIELD1_BUF_SIZE (FIELD1_W * MATRIX_H * 4)
+#define FIELD2_BUF_SIZE (FIELD2_W * MATRIX_H * 4)
+#define FIELD3_BUF_SIZE (FIELD3_W * MATRIX_H * 4)
+
+static uint8_t field1_buf[FIELD1_BUF_SIZE];
+static uint8_t field2_buf[FIELD2_BUF_SIZE];
+static uint8_t field3_buf[FIELD3_BUF_SIZE];
+
 static const uint8_t dot_font[11][7] = {
     {0x1F, 0x11, 0x11, 0x11, 0x11, 0x11, 0x1F},
     {0x00, 0x12, 0x1F, 0x10, 0x10, 0x10, 0x1F},
@@ -268,16 +276,12 @@ static void dot_field_render(dot_field_t *f)
     }
 }
 
-static void dot_field_create(dot_field_t *f, lv_obj_t *parent, int x, int y, int w)
+static void dot_field_create_with_buf(dot_field_t *f, lv_obj_t *parent, int x, int y, int w, uint8_t *buf, int buf_size)
 {
     f->width = w;
     f->height = MATRIX_H;
-    f->buf_size = f->width * f->height * 4;
-    f->buf = lv_malloc(f->buf_size);
-    if (!f->buf) {
-        LOG_ERR("Failed to allocate dot field buffer (size=%d)", f->buf_size);
-        return;
-    }
+    f->buf_size = buf_size;
+    f->buf = buf;
     memset(f->buf, 0, f->buf_size);
     
     f->img_dsc.header.magic = LV_IMAGE_HEADER_MAGIC;
@@ -295,8 +299,6 @@ static void dot_field_create(dot_field_t *f, lv_obj_t *parent, int x, int y, int
     f->img = lv_image_create(parent);
     if (!f->img) {
         LOG_ERR("Failed to create dot field image");
-        lv_free(f->buf);
-        f->buf = NULL;
         return;
     }
     lv_obj_set_pos(f->img, x, y);
@@ -520,7 +522,7 @@ void watchface_start(void)
     lv_obj_set_pos(field1_label, 12, field_top);
     lv_obj_set_width(field1_label, field_w);
 
-    dot_field_create(&field1_dm, root_page, 12, field_top + 14, FIELD1_W);
+    dot_field_create_with_buf(&field1_dm, root_page, 12, field_top + 14, FIELD1_W, field1_buf, FIELD1_BUF_SIZE);
 
     field2_label = lv_label_create(root_page);
     lv_obj_set_style_text_font(field2_label, FONT_LABEL, LV_PART_MAIN);
@@ -530,7 +532,7 @@ void watchface_start(void)
     lv_obj_set_pos(field2_label, CENTER_X - field_w/2, field_top);
     lv_obj_set_width(field2_label, field_w);
 
-    dot_field_create(&field2_dm, root_page, CENTER_X - field_w/2 + 10, field_top + 14, FIELD2_W);
+    dot_field_create_with_buf(&field2_dm, root_page, CENTER_X - field_w/2 + 10, field_top + 14, FIELD2_W, field2_buf, FIELD2_BUF_SIZE);
 
     field3_label = lv_label_create(root_page);
     lv_obj_set_style_text_font(field3_label, FONT_LABEL, LV_PART_MAIN);
@@ -540,7 +542,7 @@ void watchface_start(void)
     lv_obj_set_pos(field3_label, 156, field_top);
     lv_obj_set_width(field3_label, field_w);
 
-    dot_field_create(&field3_dm, root_page, 186, field_top + 14, FIELD3_W);
+    dot_field_create_with_buf(&field3_dm, root_page, 186, field_top + 14, FIELD3_W, field3_buf, FIELD3_BUF_SIZE);
 
     /* Bottom: icon + 5-digit steps + icon
      * Row 9:  ♥   0 8 5 7 3   🔥   */
