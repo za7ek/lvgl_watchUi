@@ -32,18 +32,17 @@ LOG_MODULE_REGISTER(watchface, LOG_LEVEL_INF);
 #define CLOCK_Y 66
 
 /* 实体线字体（Montserrat系列）替代点阵LED字体
- * 第一行标签、字段标签：FONT_LABEL = montserrat_10
- * 第二行时间、日期行、字段数值行：FONT_DATA = montserrat_12
+ * 第一行标签、字段标签：FONT_LABEL = montserrat_8（比时间行更小）
+ * 第二行时间、日期行：FONT_DATA = montserrat_12 / FONT_TIME_SMALL = montserrat_10
  * 月相文字（更小）：FONT_MOON = montserrat_8
  */
-#define FONT_LABEL      &lv_font_montserrat_10
+#define FONT_LABEL      &lv_font_montserrat_8
 #define FONT_DATA       &lv_font_montserrat_12
 #define FONT_TIME_SMALL &lv_font_montserrat_10
 #define FONT_MOON       &lv_font_montserrat_8
 #define FONT_MED        &lv_font_montserrat_12
 #define FONT_BIG        &lv_font_cjk_16
-#define FONT_FIELD_VAL  &lv_font_montserrat_12
-#define FONT_LED        &lv_font_led   /* 仅用于倒数第二行steps（LED点阵风格） */
+#define FONT_LED        &lv_font_led   /* 用于字段数值行 + 倒数第二行steps（LED点阵风格） */
 
 #define LED_DIGIT_W 18
 #define LED_DIGIT_H 20
@@ -52,11 +51,10 @@ LOG_MODULE_REGISTER(watchface, LOG_LEVEL_INF);
 #define FIELD2_DIGITS 4
 #define FIELD3_DIGITS 4
 
-/* 字段宽度改用普通label宽度（实体线字体不需要点阵LED那么宽） */
-#define FIELD_LABEL_W 72
-#define FIELD1_W FIELD_LABEL_W
-#define FIELD2_W FIELD_LABEL_W
-#define FIELD3_W FIELD_LABEL_W
+/* 字段宽度恢复为 LED 点阵宽度计算（数值行使用 LED 点阵字体） */
+#define FIELD1_W (FIELD1_DIGITS * LED_DIGIT_W + (FIELD1_DIGITS - 1) * LED_FIELD_GAP)
+#define FIELD2_W (FIELD2_DIGITS * LED_DIGIT_W + (FIELD2_DIGITS - 1) * LED_FIELD_GAP)
+#define FIELD3_W (FIELD3_DIGITS * LED_DIGIT_W + (FIELD3_DIGITS - 1) * LED_FIELD_GAP)
 
 #define BOTTOM5_DIGITS 5
 #define BOTTOM5_W (BOTTOM5_DIGITS * LED_DIGIT_W + (BOTTOM5_DIGITS - 1) * LED_FIELD_GAP)
@@ -505,13 +503,12 @@ void watchface_start(void)
     lv_obj_set_pos(seconds_label, CLOCK_X + CLOCK_W - 30, CLOCK_Y + CLOCK_H + 6);
     lv_obj_set_width(seconds_label, 30);
 
-    /* Three data fields: label on top, SOLID FONT value below (不再使用点阵LED)
-     * Row 7: RECOVERY HRS:   LAST HR:   WEEK ACT MIN:
-     * Row 8:     5.0           80           0
-     * 数值行改用 FONT_FIELD_VAL = montserrat_12 实体线字体 */
+    /* Three data fields: label on top (solid font), LED dot-matrix value below
+     * Row 7: RECOVERY HRS:   LAST HR:   WEEK ACT MIN:   （标签 montserrat_8）
+     * Row 8:     5.0           80           0             （数值 LED 点阵风格） */
     int field_top = CLOCK_Y + CLOCK_H + 22;
-    int label_h = 12;   /* montserrat_10 的标签高度 */
-    int value_h = 14;   /* montserrat_12 的数值高度 */
+    int field_h = LED_DIGIT_H;
+    int label_h = 10;
     int field_gap = 3;
     int total_field_w = 3 * FIELD1_W + 2 * field_gap;
     int field_start_x = CENTER_X - total_field_w / 2;
@@ -533,18 +530,7 @@ void watchface_start(void)
     lv_obj_set_pos(field1_label, field1_x, field_top);
     lv_obj_set_width(field1_label, FIELD1_W);
 
-    /* 数值行：普通单层 label 实体线字体（替代点阵LED） */
-    field1_val = lv_label_create(root_page);
-    lv_obj_set_style_text_font(field1_val, FONT_FIELD_VAL, LV_PART_MAIN);
-    lv_obj_set_style_text_color(field1_val, colors->data_val, LV_PART_MAIN);
-    lv_obj_set_style_text_align(field1_val, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(field1_val, LV_OPA_TRANSP, LV_PART_MAIN);
-    lv_obj_set_style_outline_width(field1_val, 0, LV_PART_MAIN);
-    lv_obj_set_style_shadow_width(field1_val, 0, LV_PART_MAIN);
-    lv_obj_set_style_pad_all(field1_val, 0, LV_PART_MAIN);
-    lv_obj_set_pos(field1_val, field1_x, field_top + label_h + 2);
-    lv_obj_set_width(field1_val, FIELD1_W);
-    field1_bg = NULL;   /* 不再使用点阵LED背景容器 */
+    led_field_create(root_page, field1_x, field_top + label_h + 2, FIELD1_W, field_h, &field1_bg, &field1_val);
 
     /* ========= Field 2: LAST HR ========= */
     field2_label = lv_label_create(root_page);
@@ -559,17 +545,7 @@ void watchface_start(void)
     lv_obj_set_pos(field2_label, field2_x, field_top);
     lv_obj_set_width(field2_label, FIELD2_W);
 
-    field2_val = lv_label_create(root_page);
-    lv_obj_set_style_text_font(field2_val, FONT_FIELD_VAL, LV_PART_MAIN);
-    lv_obj_set_style_text_color(field2_val, colors->data_val, LV_PART_MAIN);
-    lv_obj_set_style_text_align(field2_val, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(field2_val, LV_OPA_TRANSP, LV_PART_MAIN);
-    lv_obj_set_style_outline_width(field2_val, 0, LV_PART_MAIN);
-    lv_obj_set_style_shadow_width(field2_val, 0, LV_PART_MAIN);
-    lv_obj_set_style_pad_all(field2_val, 0, LV_PART_MAIN);
-    lv_obj_set_pos(field2_val, field2_x, field_top + label_h + 2);
-    lv_obj_set_width(field2_val, FIELD2_W);
-    field2_bg = NULL;
+    led_field_create(root_page, field2_x, field_top + label_h + 2, FIELD2_W, field_h, &field2_bg, &field2_val);
 
     /* ========= Field 3: WEEK ACT MIN ========= */
     field3_label = lv_label_create(root_page);
@@ -584,21 +560,11 @@ void watchface_start(void)
     lv_obj_set_pos(field3_label, field3_x, field_top);
     lv_obj_set_width(field3_label, FIELD3_W);
 
-    field3_val = lv_label_create(root_page);
-    lv_obj_set_style_text_font(field3_val, FONT_FIELD_VAL, LV_PART_MAIN);
-    lv_obj_set_style_text_color(field3_val, colors->data_val, LV_PART_MAIN);
-    lv_obj_set_style_text_align(field3_val, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(field3_val, LV_OPA_TRANSP, LV_PART_MAIN);
-    lv_obj_set_style_outline_width(field3_val, 0, LV_PART_MAIN);
-    lv_obj_set_style_shadow_width(field3_val, 0, LV_PART_MAIN);
-    lv_obj_set_style_pad_all(field3_val, 0, LV_PART_MAIN);
-    lv_obj_set_pos(field3_val, field3_x, field_top + label_h + 2);
-    lv_obj_set_width(field3_val, FIELD3_W);
-    field3_bg = NULL;
+    led_field_create(root_page, field3_x, field_top + label_h + 2, FIELD3_W, field_h, &field3_bg, &field3_val);
 
-    /* Bottom: icon + 5-digit steps (保留 LED 点阵风格，此行为倒数第二行用户未提及替换)
+    /* Bottom: icon + 5-digit steps (LED font) + icon
      * Row 9:  ♥   0 8 5 7 3   🔥   */
-    int bottom_y = field_top + label_h + 2 + value_h + 4;
+    int bottom_y = field_top + label_h + 2 + field_h + 4;
     icon_draw(root_page, ICON_HEART, 30, bottom_y + 2, colors->heart_rate);
 
     int bottom5_x = CENTER_X - BOTTOM5_W / 2;
@@ -701,16 +667,16 @@ void watchface_update_date(void)
     }
 
     char date_str[48];
-    int day_of_year = timeinfo.tm_yday + 1;
     snprintf(date_str, sizeof(date_str), "%s, %d %s %d",
              weekday_str, timeinfo.tm_mday,
              locale_get_string(LOCALE_STR_JANUARY + timeinfo.tm_mon),
              timeinfo.tm_year + 1900);
     lv_label_set_text(date_label, date_str);
 
-    char day_num_str[16];
-    snprintf(day_num_str, sizeof(day_num_str), "%d", day_of_year);
-    lv_label_set_text(seconds_label, day_num_str);
+    /* seconds_label 显示当前时间的秒（0-59），每秒更新 */
+    char sec_str[8];
+    snprintf(sec_str, sizeof(sec_str), "%02d", timeinfo.tm_sec);
+    lv_label_set_text(seconds_label, sec_str);
 
     int moon_phase = get_moon_phase(timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday);
 
@@ -777,16 +743,14 @@ void watchface_update_battery(void)
 void watchface_update_sensors(void)
 {
     lv_label_set_text(field1_label, "RECOVERY HRS:");
-    /* 实体线字体直接用 snprintf + lv_label_set_text_fmt (替代 led_field_set_value ) */
-    lv_label_set_text_fmt(field1_val, "%.1f", (float)sim_recovery);
+    led_field_set_value(field1_bg, field1_val, FIELD1_DIGITS, (float)sim_recovery + 0.0f, 1);
 
     lv_label_set_text(field2_label, "LAST HR:");
-    lv_label_set_text_fmt(field2_val, "%d", sim_last_hr);
+    led_field_set_value(field2_bg, field2_val, FIELD2_DIGITS, (float)sim_last_hr, 0);
 
     lv_label_set_text(field3_label, "WEEK ACT MIN:");
-    lv_label_set_text_fmt(field3_val, "%d", sim_week_min);
+    led_field_set_value(field3_bg, field3_val, FIELD3_DIGITS, (float)sim_week_min, 0);
 
-    /* 倒数第二行的 steps 保留 LED 点阵风格 */
     led_field_set_value(bottom5_bg, bottom5_val, BOTTOM5_DIGITS, (float)sim_steps, 0);
 
     int max_h = CLOCK_H;
