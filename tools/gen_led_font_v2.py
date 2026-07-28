@@ -214,12 +214,15 @@ def main():
         elif cid == 35:  # '#' - create grid pattern
             bitmap = create_hash_bitmap()
             data = bitmap_to_lvgl_data(bitmap)
-        elif cid == 46:  # '.' - create small dot
+        elif cid == 46:  # '.' - create small dot (inverted for foreground)
             bitmap = create_dot_bitmap()
+            bitmap = [[1 - bitmap[row][col] for col in range(len(bitmap[0]))] for row in range(len(bitmap))]
             data = bitmap_to_lvgl_data(bitmap)
         else:
             # Extract from PNG (already padded to 14x20)
             bitmap = extract_bitmap(img, info)
+            # Invert: segments -> transparent(0), gaps -> foreground(1)
+            bitmap = [[1 - bitmap[row][col] for col in range(len(bitmap[0]))] for row in range(len(bitmap))]
             data = bitmap_to_lvgl_data(bitmap)
         
         glyph_dsc = {
