@@ -274,13 +274,15 @@ static void dot_field_create(dot_field_t *f, lv_obj_t *parent, int x, int y, int
     f->height = MATRIX_H;
     f->buf_size = f->width * f->height * 4;
     f->buf = lv_malloc(f->buf_size);
-    if (f->buf) {
-        memset(f->buf, 0, f->buf_size);
+    if (!f->buf) {
+        LOG_ERR("Failed to allocate dot field buffer (size=%d)", f->buf_size);
+        return;
     }
+    memset(f->buf, 0, f->buf_size);
     
     f->img_dsc.header.magic = LV_IMAGE_HEADER_MAGIC;
     f->img_dsc.header.cf = LV_COLOR_FORMAT_ARGB8888;
-    f->img_dsc.header.flags = LV_IMAGE_FLAGS_MODIFIABLE;
+    f->img_dsc.header.flags = 0;
     f->img_dsc.header.w = f->width;
     f->img_dsc.header.h = f->height;
     f->img_dsc.header.stride = f->width * 4;
@@ -291,10 +293,17 @@ static void dot_field_create(dot_field_t *f, lv_obj_t *parent, int x, int y, int
     f->img_dsc.reserved_2 = NULL;
     
     f->img = lv_image_create(parent);
+    if (!f->img) {
+        LOG_ERR("Failed to create dot field image");
+        lv_free(f->buf);
+        f->buf = NULL;
+        return;
+    }
     lv_obj_set_pos(f->img, x, y);
     lv_obj_set_size(f->img, f->width, f->height);
     lv_image_set_src(f->img, &f->img_dsc);
     lv_obj_set_style_bg_opa(f->img, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_add_flag(f->img, LV_OBJ_FLAG_HIDDEN);
     
     f->value = 0;
     f->decimals = 0;
@@ -302,11 +311,13 @@ static void dot_field_create(dot_field_t *f, lv_obj_t *parent, int x, int y, int
 
 static void dot_field_set_value(dot_field_t *f, float value, int decimals)
 {
-    if (!f) return;
+    if (!f || !f->buf || !f->img) return;
     
     f->value = value;
     f->decimals = decimals;
     dot_field_render(f);
+    lv_obj_remove_flag(f->img, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_invalidate(f->img);
 }
 
 static const char *get_moon_string(int phase)
