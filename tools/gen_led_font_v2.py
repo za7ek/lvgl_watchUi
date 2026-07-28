@@ -1,8 +1,16 @@
 #!/usr/bin/env python3
-"""Generate LVGL 9.x font from BMFont led.fnt and led.png - Simplified version"""
+"""Generate LVGL 9.x font from BMFont led.fnt and led.png
+Converts 14x20 pixel bitmaps to 5x7 LED block structure with proper gaps
+"""
 
 import sys
 from PIL import Image
+
+# LED block configuration
+BLOCK_COLS = 5
+BLOCK_ROWS = 7
+BLOCK_SIZE = 2  # Each LED block is 2x2 pixels
+BLOCK_GAP = 1   # Gap between blocks
 
 def parse_fnt(fnt_path):
     chars = {}
@@ -40,6 +48,7 @@ def parse_fnt(fnt_path):
     return chars
 
 def extract_bitmap(img, char_info):
+    """Extract raw bitmap from PNG"""
     x, y, w, h = char_info['x'], char_info['y'], char_info['w'], char_info['h']
     
     char_img = img.crop((x, y, x + w, y + h))
@@ -52,66 +61,101 @@ def extract_bitmap(img, char_info):
         for col in range(w):
             idx = row * w + col
             pixel = pixels[idx]
-            bit = 1 if pixel > 128 else 0
+            # In PNG: 0 = black (lit), 255 = white (not lit)
+            bit = 1 if pixel < 128 else 0
             row_bits.append(bit)
         bitmap.append(row_bits)
     
     return bitmap
 
-def create_dot_bitmap(target_w=14, target_h=20):
-    """Create a dot bitmap showing 4 small dots (2x2 array) in the center"""
-    bitmap = [[0] * target_w for _ in range(target_h)]
-    
-    # Dot size: 2x2 pixels each
-    # Positions: 2 dots horizontally, 2 dots vertically
-    # Center the dots in the target area
-    
-    dot_size = 2
-    dot1_col = (target_w // 2) - 3  # Left dot column
-    dot2_col = (target_w // 2) + 1  # Right dot column
-    dot1_row = (target_h // 2) - 2  # Top dot row
-    dot2_row = (target_h // 2) + 1  # Bottom dot row
-    
-    # Draw top-left dot
-    for r in range(dot_size):
-        for c in range(dot_size):
-            bitmap[dot1_row + r][dot1_col + c] = 1
-    
-    # Draw top-right dot
-    for r in range(dot_size):
-        for c in range(dot_size):
-            bitmap[dot1_row + r][dot2_col + c] = 1
-    
-    # Draw bottom-left dot
-    for r in range(dot_size):
-        for c in range(dot_size):
-            bitmap[dot2_row + r][dot1_col + c] = 1
-    
-    # Draw bottom-right dot
-    for r in range(dot_size):
-        for c in range(dot_size):
-            bitmap[dot2_row + r][dot2_col + c] = 1
-    
-    return bitmap
-
-def expand_bitmap(bitmap, target_w):
-    """Expand bitmap to target width by adding padding on both sides"""
+def bitmap_to_block_map(bitmap):
+    """Convert raw bitmap to 5x7 block map"""
     h = len(bitmap)
     w = len(bitmap[0]) if h > 0 else 0
     
-    if w >= target_w:
-        return bitmap
+    block_map = []
+    for block_row in range(BLOCK_ROWS):
+        row_blocks = []
+        for block_col in range(BLOCK_COLS):
+            # Calculate pixel range for this block
+            start_x = block_col * (BLOCK_SIZE + BLOCK_GAP)
+            start_y = block_row * (BLOCK_SIZE + BLOCK_GAP)
+            
+            is_lit = False
+            for dy in range(BLOCK_SIZE):
+                for dx in range(BLOCK_SIZE):
+                    px = start_x + dx
+                    py = start_y + dy
+                    if px < w and py < h:
+                        if bitmap[py][px]:
+                            is_lit = True
+                            break
+                if is_lit:
+                    break
+            
+            row_blocks.append(is_lit)
+        block_map.append(row_blocks)
     
-    new_bitmap = [[0] * target_w for _ in range(h)]
-    pad_left = (target_w - w) // 2
+    return block_map
+
+def block_map_to_bitmap(block_map):
+    """Convert 5x7 block map back to 14x20 pixel bitmap with proper gaps"""
+    target_w = BLOCK_COLS * BLOCK_SIZE + (BLOCK_COLS - 1) * BLOCK_GAP  # 14
+    target_h = BLOCK_ROWS * BLOCK_SIZE + (BLOCK_ROWS - 1) * BLOCK_GAP  # 20
     
-    for row in range(h):
-        for col in range(w):
-            new_bitmap[row][col + pad_left] = bitmap[row][col]
+    bitmap = [[0] * target_w for _ in range(target_h)]
     
-    return new_bitmap
+    for block_row in range(BLOCK_ROWS):
+        for block_col in range(BLOCK_COLS):
+            if block_map[block_row][block_col]:
+                start_x = block_col * (BLOCK_SIZE + BLOCK_GAP)
+                start_y = block_row * (BLOCK_SIZE + BLOCK_GAP)
+                
+                for dy in range(BLOCK_SIZE):
+                    for dx in range(BLOCK_SIZE):
+                        px = start_x + dx
+                        py = start_y + dy
+                        if px < target_w and py < target_h:
+                            bitmap[py][px] = 1
+    
+    return bitmap
+
+def create_hash_bitmap():
+    """Create '#' character bitmap with grid pattern"""
+    block_map = [[False] * BLOCK_COLS for _ in range(BLOCK_ROWS)]
+    
+    # Create grid pattern for '#'
+    # Column 1 and 3 alternating
+    for row in [0, 2, 4, 6]:
+        block_map[row][0] = True
+        block_map[row][2] = True
+    for row in [1, 3, 5]:
+        block_map[row][1] = True
+        block_map[row][3] = True
+    
+    # Full horizontal bars
+    for col in range(BLOCK_COLS):
+        block_map[2][col] = True
+        block_map[5][col] = True
+    
+    return block_map_to_bitmap(block_map)
+
+def create_dot_bitmap():
+    """Create '.' character bitmap - small dot"""
+    block_map = [[False] * BLOCK_COLS for _ in range(BLOCK_ROWS)]
+    
+    # Single dot in center bottom
+    block_map[5][2] = True
+    
+    return block_map_to_bitmap(block_map)
+
+def create_space_bitmap():
+    """Create space character bitmap - all empty"""
+    block_map = [[False] * BLOCK_COLS for _ in range(BLOCK_ROWS)]
+    return block_map_to_bitmap(block_map)
 
 def bitmap_to_lvgl_data(bitmap):
+    """Convert bitmap to LVGL 1bpp continuous bit-pack format"""
     h = len(bitmap)
     w = len(bitmap[0]) if h > 0 else 0
     
@@ -155,64 +199,49 @@ def main():
     sorted_ids = sorted(selected_chars.keys())
     print(f"Selected {len(sorted_ids)} characters: {sorted_ids}")
     
+    target_w = BLOCK_COLS * BLOCK_SIZE + (BLOCK_COLS - 1) * BLOCK_GAP
+    target_h = BLOCK_ROWS * BLOCK_SIZE + (BLOCK_ROWS - 1) * BLOCK_GAP
+    print(f"Target character size: {target_w}x{target_h} pixels (5x7 blocks, {BLOCK_SIZE}x{BLOCK_SIZE}px each, {BLOCK_GAP}px gap)")
+    
     glyph_dscs = []
     bitmap_data = bytearray()
     
     for glyph_idx, cid in enumerate(sorted_ids):
         info = selected_chars[cid]
+        w = target_w
+        h = target_h
         
-        if cid == 46:  # '.' character - use custom dot bitmap
-            w = 14
-            h = 20
-            bitmap = create_dot_bitmap(w, h)
+        if cid == 32:  # Space
+            bitmap = create_space_bitmap()
             data = bitmap_to_lvgl_data(bitmap)
-            
-            glyph_dsc = {
-                'bitmap_index': len(bitmap_data),
-                'adv_w': w * 10,
-                'box_w': w,
-                'box_h': h,
-                'ofs_x': 0,
-                'ofs_y': 0
-            }
-        elif cid in [49, 58]:  # '1' and ':' - expand to 14 pixels wide
-            w = 14
-            h = info['h']
-            bitmap = extract_bitmap(img, info)
-            bitmap = expand_bitmap(bitmap, w)
+        elif cid == 35:  # '#' - create grid pattern
+            bitmap = create_hash_bitmap()
             data = bitmap_to_lvgl_data(bitmap)
-            
-            glyph_dsc = {
-                'bitmap_index': len(bitmap_data),
-                'adv_w': w * 10,
-                'box_w': w,
-                'box_h': h,
-                'ofs_x': 0,
-                'ofs_y': -info['yoff']
-            }
+        elif cid == 46:  # '.' - create small dot
+            bitmap = create_dot_bitmap()
+            data = bitmap_to_lvgl_data(bitmap)
         else:
-            bitmap = extract_bitmap(img, info)
+            # Extract from PNG and convert to block structure
+            raw_bitmap = extract_bitmap(img, info)
+            block_map = bitmap_to_block_map(raw_bitmap)
+            bitmap = block_map_to_bitmap(block_map)
             data = bitmap_to_lvgl_data(bitmap)
-            
-            w = info['w']
-            h = info['h']
-            
-            glyph_dsc = {
-                'bitmap_index': len(bitmap_data),
-                'adv_w': info['xadv'] * 10,
-                'box_w': w,
-                'box_h': h,
-                'ofs_x': info['xoff'],
-                'ofs_y': -info['yoff']
-            }
         
+        glyph_dsc = {
+            'bitmap_index': len(bitmap_data),
+            'adv_w': w * 10,
+            'box_w': w,
+            'box_h': h,
+            'ofs_x': 0,
+            'ofs_y': 0
+        }
         glyph_dscs.append(glyph_dsc)
         bitmap_data.extend(data)
         print(f"  Char id={cid} (glyph {glyph_idx}): {w}x{h}, {len(data)} bytes, bitmap_index={glyph_dsc['bitmap_index']}")
     
     print(f"Total bitmap data size: {len(bitmap_data)} bytes")
     
-    # Generate cmap entries - one per character for simplicity
+    # Generate cmap entries
     cmap_entries = []
     for i, cid in enumerate(sorted_ids):
         cmap_entries.append({
@@ -226,6 +255,7 @@ def main():
         f.write(' * Auto-generated LVGL 9.x LED font\n')
         f.write(' * Source: Segment34.CN/resources/fonts/led.fnt + led.png\n')
         f.write(' * This font uses 1bpp (1 bit per pixel) format\n')
+        f.write(' * Each character is 5x7 LED blocks (14x20 pixels)\n')
         f.write(' */\n\n')
         
         f.write('#include "lvgl.h"\n\n')
@@ -249,7 +279,7 @@ def main():
             f.write(f'    {{.bitmap_index = {gd["bitmap_index"]}, .adv_w = {gd["adv_w"]}, .box_w = {gd["box_w"]}, .box_h = {gd["box_h"]}, .ofs_x = {gd["ofs_x"]}, .ofs_y = {gd["ofs_y"]}}}{comma}\n')
         f.write('};\n\n')
         
-        # Write character mapping - one entry per character
+        # Write character mapping
         f.write('/*Collect the unicode lists and glyph_id offsets*/\n')
         f.write(f'static const lv_font_fmt_txt_cmap_t cmaps[] = {{\n')
         for i, entry in enumerate(cmap_entries):

@@ -679,7 +679,7 @@ void watchface_update_sensors(void)
     lv_label_set_text(field2_label, "LAST HR:");
     led_field_set_value(field2_bg, field2_val, FIELD2_DIGITS, (float)sim_last_hr, 0);
 
-    lv_label_set_text(field3_label, "WK ACT:");
+    lv_label_set_text(field3_label, "WEEK ACT MIN:");
     led_field_set_value(field3_bg, field3_val, FIELD3_DIGITS, (float)sim_week_min, 0);
 
     char steps_str[16];
