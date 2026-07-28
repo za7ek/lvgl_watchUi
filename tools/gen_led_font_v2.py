@@ -48,23 +48,35 @@ def parse_fnt(fnt_path):
     return chars
 
 def extract_bitmap(img, char_info):
-    """Extract raw bitmap from PNG"""
+    """Extract raw bitmap from PNG and pad to target size"""
     x, y, w, h = char_info['x'], char_info['y'], char_info['w'], char_info['h']
     
     char_img = img.crop((x, y, x + w, y + h))
     char_img = char_img.convert('L')
     pixels = list(char_img.getdata())
     
-    bitmap = []
+    # Target size: 5 cols × 2px + 4 gaps × 1px = 14, 7 rows × 2px + 6 gaps × 1px = 20
+    target_w = BLOCK_COLS * BLOCK_SIZE + (BLOCK_COLS - 1) * BLOCK_GAP  # 14
+    target_h = BLOCK_ROWS * BLOCK_SIZE + (BLOCK_ROWS - 1) * BLOCK_GAP  # 20
+    
+    # Create target bitmap
+    bitmap = [[0] * target_w for _ in range(target_h)]
+    
+    # Calculate offset to center the character
+    offset_x = (target_w - w) // 2
+    offset_y = (target_h - h) // 2
+    
+    # Copy pixels to target bitmap
     for row in range(h):
-        row_bits = []
         for col in range(w):
             idx = row * w + col
             pixel = pixels[idx]
-            # In PNG: 0 = black (lit), 255 = white (not lit)
             bit = 1 if pixel < 128 else 0
-            row_bits.append(bit)
-        bitmap.append(row_bits)
+            # Place at offset position
+            target_row = row + offset_y
+            target_col = col + offset_x
+            if 0 <= target_row < target_h and 0 <= target_col < target_w:
+                bitmap[target_row][target_col] = bit
     
     return bitmap
 
@@ -121,23 +133,8 @@ def block_map_to_bitmap(block_map):
     return bitmap
 
 def create_hash_bitmap():
-    """Create '#' character bitmap with grid pattern"""
-    block_map = [[False] * BLOCK_COLS for _ in range(BLOCK_ROWS)]
-    
-    # Create grid pattern for '#'
-    # Column 1 and 3 alternating
-    for row in [0, 2, 4, 6]:
-        block_map[row][0] = True
-        block_map[row][2] = True
-    for row in [1, 3, 5]:
-        block_map[row][1] = True
-        block_map[row][3] = True
-    
-    # Full horizontal bars
-    for col in range(BLOCK_COLS):
-        block_map[2][col] = True
-        block_map[5][col] = True
-    
+    """Create '#' character bitmap - full grid (all 35 blocks lit) for background"""
+    block_map = [[True] * BLOCK_COLS for _ in range(BLOCK_ROWS)]
     return block_map_to_bitmap(block_map)
 
 def create_dot_bitmap():
@@ -221,10 +218,8 @@ def main():
             bitmap = create_dot_bitmap()
             data = bitmap_to_lvgl_data(bitmap)
         else:
-            # Extract from PNG and convert to block structure
-            raw_bitmap = extract_bitmap(img, info)
-            block_map = bitmap_to_block_map(raw_bitmap)
-            bitmap = block_map_to_bitmap(block_map)
+            # Extract from PNG (already padded to 14x20)
+            bitmap = extract_bitmap(img, info)
             data = bitmap_to_lvgl_data(bitmap)
         
         glyph_dsc = {
