@@ -345,8 +345,8 @@ void watchface_start(void)
     lv_obj_center(root_page);
 
     /* Top: DAWN label + time | moon | DUSK label + time
-     * Row 1 (y=6):  DAWN: [moon] DUSK:   （标签+月相更紧凑）
-     * Row 2 (y=20): 01:18  [NEW]  03:13  （时间+月相更紧凑） */
+     * Row 1 (y=8):  DAWN: [moon] DUSK:   （标签+月相紧挨）
+     * Row 2 (y=19): 01:18  [NEW]  03:13  （时间+月相紧挨） */
     dawn_label = lv_label_create(root_page);
     lv_obj_set_style_text_font(dawn_label, FONT_LABEL, LV_PART_MAIN);
     lv_obj_set_style_text_color(dawn_label, (lv_color_t)LV_COLOR_MAKE(0x52, 0xaa, 0xac), LV_PART_MAIN);
@@ -355,8 +355,8 @@ void watchface_start(void)
     lv_obj_set_style_outline_width(dawn_label, 0, LV_PART_MAIN);
     lv_obj_set_style_shadow_width(dawn_label, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(dawn_label, 0, LV_PART_MAIN);
-    lv_obj_set_pos(dawn_label, 10, 6);
-    lv_obj_set_width(dawn_label, 58);
+    lv_obj_set_pos(dawn_label, 46, 8);
+    lv_obj_set_width(dawn_label, 44);
 
     dawn_time_label = lv_label_create(root_page);
     lv_obj_set_style_text_font(dawn_time_label, FONT_TIME_SMALL, LV_PART_MAIN);
@@ -366,8 +366,8 @@ void watchface_start(void)
     lv_obj_set_style_outline_width(dawn_time_label, 0, LV_PART_MAIN);
     lv_obj_set_style_shadow_width(dawn_time_label, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(dawn_time_label, 0, LV_PART_MAIN);
-    lv_obj_set_pos(dawn_time_label, 10, 20);
-    lv_obj_set_width(dawn_time_label, 58);
+    lv_obj_set_pos(dawn_time_label, 46, 19);
+    lv_obj_set_width(dawn_time_label, 44);
 
     moon_label = lv_label_create(root_page);
     lv_obj_set_style_text_font(moon_label, FONT_MOON, LV_PART_MAIN);  /* 月相用更小的montserrat 8 */
@@ -389,8 +389,8 @@ void watchface_start(void)
     lv_obj_set_style_outline_width(dusk_label, 0, LV_PART_MAIN);
     lv_obj_set_style_shadow_width(dusk_label, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(dusk_label, 0, LV_PART_MAIN);
-    lv_obj_set_pos(dusk_label, 172, 6);
-    lv_obj_set_width(dusk_label, 58);
+    lv_obj_set_pos(dusk_label, 150, 8);
+    lv_obj_set_width(dusk_label, 44);
 
     dusk_time_label = lv_label_create(root_page);
     lv_obj_set_style_text_font(dusk_time_label, FONT_TIME_SMALL, LV_PART_MAIN);
@@ -400,8 +400,8 @@ void watchface_start(void)
     lv_obj_set_style_outline_width(dusk_time_label, 0, LV_PART_MAIN);
     lv_obj_set_style_shadow_width(dusk_time_label, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(dusk_time_label, 0, LV_PART_MAIN);
-    lv_obj_set_pos(dusk_time_label, 172, 20);
-    lv_obj_set_width(dusk_time_label, 58);
+    lv_obj_set_pos(dusk_time_label, 150, 19);
+    lv_obj_set_width(dusk_time_label, 44);
 
     /* Weather: temp line + description line
      * Row 3 (y=40):  59F, ↑4, 27%
