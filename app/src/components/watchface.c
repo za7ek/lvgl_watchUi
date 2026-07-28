@@ -46,6 +46,9 @@ LOG_MODULE_REGISTER(watchface, LOG_LEVEL_INF);
 #define FIELD2_W (2 * MATRIX_W + MATRIX_GAP)
 #define FIELD3_W (2 * MATRIX_W + MATRIX_GAP)
 
+#define DOT_BG_COLOR  ((lv_color_t)LV_COLOR_MAKE(0x08, 0x30, 0x39))
+#define DOT_FG_COLOR  ((lv_color_t)LV_COLOR_MAKE(0xff, 0xff, 0xff))
+
 static const uint8_t dot_font[11][7] = {
     {0x1F, 0x11, 0x11, 0x11, 0x11, 0x11, 0x1F},
     {0x00, 0x12, 0x1F, 0x10, 0x10, 0x10, 0x1F},
@@ -61,7 +64,12 @@ static const uint8_t dot_font[11][7] = {
 };
 
 typedef struct {
-    lv_obj_t *container;
+    lv_obj_t *img;
+    lv_image_dsc_t img_dsc;
+    uint8_t *buf;
+    int buf_size;
+    int width;
+    int height;
     float value;
     int decimals;
 } dot_field_t;
@@ -202,73 +210,11 @@ static lv_obj_t *clock_col_create(lv_obj_t *parent, lv_coord_t x, lv_coord_t w,
     return col;
 }
 
-static void dot_field_draw_bg(lv_layer_t *layer, int x_offset)
+static void dot_field_render(dot_field_t *f)
 {
-    lv_draw_rect_dsc_t rect_dsc;
-    lv_draw_rect_dsc_init(&rect_dsc);
-    rect_dsc.base.layer = layer;
-    rect_dsc.bg_color = (lv_color_t)LV_COLOR_MAKE(0x08, 0x30, 0x39);
-    rect_dsc.bg_opa = LV_OPA_COVER;
-    rect_dsc.border_opa = LV_OPA_TRANSP;
-    rect_dsc.outline_opa = LV_OPA_TRANSP;
-    rect_dsc.shadow_opa = LV_OPA_TRANSP;
+    if (!f || !f->buf) return;
     
-    for (int row = 0; row < DOT_ROWS; row++) {
-        for (int col = 0; col < DOT_COLS; col++) {
-            int px = x_offset + col * (DOT_W + DOT_GAP);
-            int py = row * (DOT_H + DOT_GAP);
-            
-            lv_area_t area;
-            area.x1 = px;
-            area.y1 = py;
-            area.x2 = px + DOT_W - 1;
-            area.y2 = py + DOT_H - 1;
-            
-            lv_draw_rect(layer, &rect_dsc, &area);
-        }
-    }
-}
-
-static void dot_field_draw_digit(lv_layer_t *layer, int x_offset, int digit)
-{
-    if (digit < 0 || digit > 10) digit = 10;
-    
-    lv_draw_rect_dsc_t rect_dsc;
-    lv_draw_rect_dsc_init(&rect_dsc);
-    rect_dsc.base.layer = layer;
-    rect_dsc.bg_color = (lv_color_t)LV_COLOR_MAKE(0xff, 0xff, 0xff);
-    rect_dsc.bg_opa = LV_OPA_COVER;
-    rect_dsc.border_opa = LV_OPA_TRANSP;
-    rect_dsc.outline_opa = LV_OPA_TRANSP;
-    rect_dsc.shadow_opa = LV_OPA_TRANSP;
-    
-    for (int row = 0; row < DOT_ROWS; row++) {
-        uint8_t row_data = dot_font[digit][row];
-        for (int col = 0; col < DOT_COLS; col++) {
-            bool on = (row_data >> (4 - col)) & 0x01;
-            if (on) {
-                int px = x_offset + col * (DOT_W + DOT_GAP);
-                int py = row * (DOT_H + DOT_GAP);
-                
-                lv_area_t area;
-                area.x1 = px;
-                area.y1 = py;
-                area.x2 = px + DOT_W - 1;
-                area.y2 = py + DOT_H - 1;
-                
-                lv_draw_rect(layer, &rect_dsc, &area);
-            }
-        }
-    }
-}
-
-static void dot_field_draw_event_cb(lv_event_t *e)
-{
-    lv_obj_t *obj = lv_event_get_current_target(e);
-    lv_layer_t *layer = lv_event_get_layer(e);
-    dot_field_t *f = (dot_field_t *)lv_obj_get_user_data(obj);
-    
-    if (!f || !layer) return;
+    memset(f->buf, 0, f->buf_size);
     
     char buf[8];
     if (f->decimals == 1) {
@@ -277,43 +223,100 @@ static void dot_field_draw_event_cb(lv_event_t *e)
         snprintf(buf, sizeof(buf), "%d", (int)f->value);
     }
     
+    int num_digits = 0;
+    for (int i = 0; buf[i] != '\0' && num_digits < 4; i++) {
+        if (buf[i] >= '0' && buf[i] <= '9') {
+            num_digits++;
+        } else if (buf[i] == '.') {
+            /* decimal point shares matrix with previous digit */
+        }
+    }
+    
     int idx = 0;
-    for (int i = 0; buf[i] != '\0' && idx < 4; i++) {
-        int x_offset = idx * (MATRIX_W + MATRIX_GAP);
+    int matrix_idx = 0;
+    for (int i = 0; buf[i] != '\0' && matrix_idx < 4; i++) {
+        int mx = matrix_idx * (MATRIX_W + MATRIX_GAP);
         
-        dot_field_draw_bg(layer, x_offset);
+        for (int row = 0; row < DOT_ROWS; row++) {
+            for (int col = 0; col < DOT_COLS; col++) {
+                int px = mx + col * (DOT_W + DOT_GAP);
+                int py = row * (DOT_H + DOT_GAP);
+                
+                bool is_fg = false;
+                int digit_idx = -1;
+                
+                if (buf[i] >= '0' && buf[i] <= '9') {
+                    digit_idx = buf[i] - '0';
+                    is_fg = (dot_font[digit_idx][row] >> (4 - col)) & 0x01;
+                } else if (buf[i] == '.') {
+                    is_fg = (dot_font[10][row] >> (4 - col)) & 0x01;
+                }
+                
+                lv_color_t color = is_fg ? DOT_FG_COLOR : DOT_BG_COLOR;
+                
+                for (int dx = 0; dx < DOT_W; dx++) {
+                    for (int dy = 0; dy < DOT_H; dy++) {
+                        int screen_x = px + dx;
+                        int screen_y = py + dy;
+                        if (screen_x < f->width && screen_y < f->height) {
+                            int offset = (screen_y * f->width + screen_x) * 4;
+                            f->buf[offset + 0] = color.blue;
+                            f->buf[offset + 1] = color.green;
+                            f->buf[offset + 2] = color.red;
+                            f->buf[offset + 3] = 0xFF;
+                        }
+                    }
+                }
+            }
+        }
         
         if (buf[i] >= '0' && buf[i] <= '9') {
-            dot_field_draw_digit(layer, x_offset, buf[i] - '0');
-            idx++;
+            matrix_idx++;
         } else if (buf[i] == '.') {
-            dot_field_draw_digit(layer, x_offset, 10);
+            /* decimal point doesn't advance matrix */
         }
     }
 }
 
 static void dot_field_create(dot_field_t *f, lv_obj_t *parent, int x, int y, int w)
 {
-    f->container = lv_obj_create(parent);
-    lv_obj_set_size(f->container, w, MATRIX_H);
-    lv_obj_set_pos(f->container, x, y);
-    lv_obj_set_style_bg_opa(f->container, LV_OPA_TRANSP, LV_PART_MAIN);
-    lv_obj_set_style_border_width(f->container, 0, LV_PART_MAIN);
-    lv_obj_set_style_pad_all(f->container, 0, LV_PART_MAIN);
+    f->width = w;
+    f->height = MATRIX_H;
+    f->buf_size = f->width * f->height * 4;
+    f->buf = lv_malloc(f->buf_size);
+    if (f->buf) {
+        memset(f->buf, 0, f->buf_size);
+    }
+    
+    f->img_dsc.header.magic = LV_IMAGE_HEADER_MAGIC;
+    f->img_dsc.header.cf = LV_COLOR_FORMAT_ARGB8888;
+    f->img_dsc.header.flags = LV_IMAGE_FLAGS_MODIFIABLE;
+    f->img_dsc.header.w = f->width;
+    f->img_dsc.header.h = f->height;
+    f->img_dsc.header.stride = f->width * 4;
+    f->img_dsc.header.reserved_2 = 0;
+    f->img_dsc.data_size = f->buf_size;
+    f->img_dsc.data = f->buf;
+    f->img_dsc.reserved = NULL;
+    f->img_dsc.reserved_2 = NULL;
+    
+    f->img = lv_image_create(parent);
+    lv_obj_set_pos(f->img, x, y);
+    lv_obj_set_size(f->img, f->width, f->height);
+    lv_image_set_src(f->img, &f->img_dsc);
+    lv_obj_set_style_bg_opa(f->img, LV_OPA_TRANSP, LV_PART_MAIN);
     
     f->value = 0;
     f->decimals = 0;
-    lv_obj_set_user_data(f->container, f);
-    lv_obj_add_event_cb(f->container, dot_field_draw_event_cb, LV_EVENT_DRAW_POST, NULL);
 }
 
 static void dot_field_set_value(dot_field_t *f, float value, int decimals)
 {
-    if (!f->container) return;
+    if (!f) return;
     
     f->value = value;
     f->decimals = decimals;
-    lv_obj_invalidate(f->container);
+    dot_field_render(f);
 }
 
 static const char *get_moon_string(int phase)
