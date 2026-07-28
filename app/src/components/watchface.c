@@ -223,16 +223,6 @@ static void dot_field_render(dot_field_t *f)
         snprintf(buf, sizeof(buf), "%d", (int)f->value);
     }
     
-    int num_digits = 0;
-    for (int i = 0; buf[i] != '\0' && num_digits < 4; i++) {
-        if (buf[i] >= '0' && buf[i] <= '9') {
-            num_digits++;
-        } else if (buf[i] == '.') {
-            /* decimal point shares matrix with previous digit */
-        }
-    }
-    
-    int idx = 0;
     int matrix_idx = 0;
     for (int i = 0; buf[i] != '\0' && matrix_idx < 4; i++) {
         int mx = matrix_idx * (MATRIX_W + MATRIX_GAP);
