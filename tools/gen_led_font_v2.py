@@ -152,7 +152,11 @@ def create_space_bitmap():
     return block_map_to_bitmap(block_map)
 
 def bitmap_to_lvgl_data(bitmap):
-    """Convert bitmap to LVGL 1bpp continuous bit-pack format"""
+    """Convert bitmap to LVGL 1bpp continuous bit-pack format
+    
+    LVGL 1bpp format: bit=0 means foreground color, bit=1 means background
+    So we need to invert: bitmap 1 (lit segment) -> 0 (foreground), bitmap 0 (gap) -> 1 (background)
+    """
     h = len(bitmap)
     w = len(bitmap[0]) if h > 0 else 0
     
@@ -162,7 +166,9 @@ def bitmap_to_lvgl_data(bitmap):
     
     for row in range(h):
         for col in range(w):
-            if bitmap[row][col]:
+            # Invert: segment(1) -> 0 (foreground), gap(0) -> 1 (background)
+            bit = 1 - bitmap[row][col]
+            if bit:
                 byte_val |= (1 << (7 - bit_pos))
             bit_pos += 1
             if bit_pos == 8:
@@ -214,15 +220,12 @@ def main():
         elif cid == 35:  # '#' - create grid pattern
             bitmap = create_hash_bitmap()
             data = bitmap_to_lvgl_data(bitmap)
-        elif cid == 46:  # '.' - create small dot (inverted for foreground)
+        elif cid == 46:  # '.' - create small dot
             bitmap = create_dot_bitmap()
-            bitmap = [[1 - bitmap[row][col] for col in range(len(bitmap[0]))] for row in range(len(bitmap))]
             data = bitmap_to_lvgl_data(bitmap)
         else:
             # Extract from PNG (already padded to 14x20)
             bitmap = extract_bitmap(img, info)
-            # Invert: segments -> transparent(0), gaps -> foreground(1)
-            bitmap = [[1 - bitmap[row][col] for col in range(len(bitmap[0]))] for row in range(len(bitmap))]
             data = bitmap_to_lvgl_data(bitmap)
         
         glyph_dsc = {

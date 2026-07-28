@@ -196,6 +196,9 @@ static void led_field_create(lv_obj_t *parent, int x, int y, int w, int h,
     lv_obj_set_style_text_align(bg, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     lv_obj_set_pos(bg, x, y);
     lv_obj_set_size(bg, w, h);
+    lv_obj_set_style_opa(bg, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(bg, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_border_width(bg, 0, LV_PART_MAIN);
     lv_label_set_long_mode(bg, LV_LABEL_LONG_CLIP);
     
     lv_obj_t *val = lv_label_create(parent);
@@ -204,6 +207,9 @@ static void led_field_create(lv_obj_t *parent, int x, int y, int w, int h,
     lv_obj_set_style_text_align(val, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     lv_obj_set_pos(val, x, y);
     lv_obj_set_size(val, w, h);
+    lv_obj_set_style_opa(val, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(val, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_border_width(val, 0, LV_PART_MAIN);
     lv_label_set_long_mode(val, LV_LABEL_LONG_CLIP);
     
     *bg_out = bg;
