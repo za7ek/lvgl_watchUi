@@ -11,6 +11,7 @@
 #include "theme.h"
 #include "lv_font_cjk.h"
 #include "lv_font_segments80.h"
+#include "lv_font_led.h"
 #include <lvgl.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
@@ -32,55 +33,20 @@ LOG_MODULE_REGISTER(watchface, LOG_LEVEL_INF);
 #define FONT_DATA   &lv_font_montserrat_10
 #define FONT_MED    &lv_font_montserrat_12
 #define FONT_BIG    &lv_font_cjk_16
+#define FONT_LED    &lv_font_led
 
-#define DOT_COLS 5
-#define DOT_ROWS 7
-#define DOT_W 3
-#define DOT_H 3
-#define DOT_GAP 1
-#define MATRIX_W (DOT_COLS * (DOT_W + DOT_GAP) - DOT_GAP)
-#define MATRIX_H (DOT_ROWS * (DOT_H + DOT_GAP) - DOT_GAP)
-#define MATRIX_GAP 4
+#define LED_DIGIT_W 18
+#define LED_FIELD_GAP 8
+#define FIELD1_DIGITS 3
+#define FIELD2_DIGITS 2
+#define FIELD3_DIGITS 2
 
-#define FIELD1_W (3 * MATRIX_W + 2 * MATRIX_GAP)
-#define FIELD2_W (2 * MATRIX_W + MATRIX_GAP)
-#define FIELD3_W (2 * MATRIX_W + MATRIX_GAP)
+#define FIELD1_W (FIELD1_DIGITS * LED_DIGIT_W + (FIELD1_DIGITS - 1) * LED_FIELD_GAP)
+#define FIELD2_W (FIELD2_DIGITS * LED_DIGIT_W + (FIELD2_DIGITS - 1) * LED_FIELD_GAP)
+#define FIELD3_W (FIELD3_DIGITS * LED_DIGIT_W + (FIELD3_DIGITS - 1) * LED_FIELD_GAP)
 
-#define DOT_BG_COLOR  ((lv_color_t)LV_COLOR_MAKE(0x08, 0x30, 0x39))
-#define DOT_FG_COLOR  ((lv_color_t)LV_COLOR_MAKE(0xff, 0xff, 0xff))
-
-#define FIELD1_BUF_SIZE (FIELD1_W * MATRIX_H * 4)
-#define FIELD2_BUF_SIZE (FIELD2_W * MATRIX_H * 4)
-#define FIELD3_BUF_SIZE (FIELD3_W * MATRIX_H * 4)
-
-static uint8_t field1_buf[FIELD1_BUF_SIZE];
-static uint8_t field2_buf[FIELD2_BUF_SIZE];
-static uint8_t field3_buf[FIELD3_BUF_SIZE];
-
-static const uint8_t dot_font[11][7] = {
-    {0x1F, 0x11, 0x11, 0x11, 0x11, 0x11, 0x1F},
-    {0x00, 0x12, 0x1F, 0x10, 0x10, 0x10, 0x1F},
-    {0x1F, 0x10, 0x10, 0x1F, 0x01, 0x01, 0x1F},
-    {0x1F, 0x10, 0x10, 0x1F, 0x10, 0x10, 0x1F},
-    {0x11, 0x11, 0x11, 0x1F, 0x10, 0x10, 0x10},
-    {0x1F, 0x01, 0x01, 0x1F, 0x10, 0x10, 0x1F},
-    {0x1F, 0x01, 0x01, 0x1F, 0x11, 0x11, 0x1F},
-    {0x1F, 0x10, 0x10, 0x10, 0x10, 0x10, 0x10},
-    {0x1F, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x1F},
-    {0x1F, 0x11, 0x11, 0x1F, 0x10, 0x10, 0x10},
-    {0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0x06},
-};
-
-typedef struct {
-    lv_obj_t *img;
-    lv_image_dsc_t img_dsc;
-    uint8_t *buf;
-    int buf_size;
-    int width;
-    int height;
-    float value;
-    int decimals;
-} dot_field_t;
+#define LED_BG_COLOR  ((lv_color_t)LV_COLOR_MAKE(0x08, 0x30, 0x39))
+#define LED_FG_COLOR  ((lv_color_t)LV_COLOR_MAKE(0xff, 0xff, 0xff))
 
 static int sim_steps = 8542;
 static int sim_temp = 59;
@@ -137,6 +103,13 @@ static lv_obj_t *field1_label = NULL;
 static lv_obj_t *field2_label = NULL;
 static lv_obj_t *field3_label = NULL;
 
+static lv_obj_t *field1_bg = NULL;
+static lv_obj_t *field1_val = NULL;
+static lv_obj_t *field2_bg = NULL;
+static lv_obj_t *field2_val = NULL;
+static lv_obj_t *field3_bg = NULL;
+static lv_obj_t *field3_val = NULL;
+
 static lv_obj_t *bottom5_label = NULL;
 
 static lv_obj_t *battery_container = NULL;
@@ -146,10 +119,6 @@ static bool battery_show_percent = false;
 
 static lv_obj_t *stress_bar = NULL;
 static lv_obj_t *bodybatt_bar = NULL;
-
-static dot_field_t field1_dm = {0};
-static dot_field_t field2_dm = {0};
-static dot_field_t field3_dm = {0};
 
 static lv_timer_t *time_timer = NULL;
 static lv_timer_t *sensor_timer = NULL;
@@ -218,108 +187,60 @@ static lv_obj_t *clock_col_create(lv_obj_t *parent, lv_coord_t x, lv_coord_t w,
     return col;
 }
 
-static void dot_field_render(dot_field_t *f)
+static void led_field_create(lv_obj_t *parent, int x, int y, int w, int h,
+                              lv_obj_t **bg_out, lv_obj_t **val_out)
 {
-    if (!f || !f->buf) return;
+    lv_obj_t *bg = lv_label_create(parent);
+    lv_obj_set_style_text_font(bg, FONT_LED, LV_PART_MAIN);
+    lv_obj_set_style_text_color(bg, LED_BG_COLOR, LV_PART_MAIN);
+    lv_obj_set_style_text_align(bg, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+    lv_obj_set_pos(bg, x, y);
+    lv_obj_set_size(bg, w, h);
+    lv_label_set_long_mode(bg, LV_LABEL_LONG_CLIP);
     
-    memset(f->buf, 0, f->buf_size);
+    lv_obj_t *val = lv_label_create(parent);
+    lv_obj_set_style_text_font(val, FONT_LED, LV_PART_MAIN);
+    lv_obj_set_style_text_color(val, LED_FG_COLOR, LV_PART_MAIN);
+    lv_obj_set_style_text_align(val, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+    lv_obj_set_pos(val, x, y);
+    lv_obj_set_size(val, w, h);
+    lv_label_set_long_mode(val, LV_LABEL_LONG_CLIP);
     
-    char buf[8];
-    if (f->decimals == 1) {
-        snprintf(buf, sizeof(buf), "%.1f", (double)f->value);
+    *bg_out = bg;
+    *val_out = val;
+}
+
+static void led_field_set_value(lv_obj_t *bg, lv_obj_t *val, int digits, float value, int decimals)
+{
+    if (!bg || !val) return;
+    
+    char bg_buf[8];
+    char val_buf[8];
+    
+    if (decimals == 1) {
+        snprintf(val_buf, sizeof(val_buf), "%.1f", (double)value);
+        int total_chars = strlen(val_buf);
+        for (int i = 0; i < digits && i < total_chars; i++) {
+            bg_buf[i] = (val_buf[i] == '.') ? '.' : '#';
+        }
+        bg_buf[digits] = '\0';
     } else {
-        snprintf(buf, sizeof(buf), "%d", (int)f->value);
-    }
-    
-    int matrix_idx = 0;
-    for (int i = 0; buf[i] != '\0' && matrix_idx < 4; i++) {
-        int mx = matrix_idx * (MATRIX_W + MATRIX_GAP);
-        
-        for (int row = 0; row < DOT_ROWS; row++) {
-            for (int col = 0; col < DOT_COLS; col++) {
-                int px = mx + col * (DOT_W + DOT_GAP);
-                int py = row * (DOT_H + DOT_GAP);
-                
-                bool is_fg = false;
-                int digit_idx = -1;
-                
-                if (buf[i] >= '0' && buf[i] <= '9') {
-                    digit_idx = buf[i] - '0';
-                    is_fg = (dot_font[digit_idx][row] >> (4 - col)) & 0x01;
-                } else if (buf[i] == '.') {
-                    is_fg = (dot_font[10][row] >> (4 - col)) & 0x01;
-                }
-                
-                lv_color_t color = is_fg ? DOT_FG_COLOR : DOT_BG_COLOR;
-                
-                for (int dx = 0; dx < DOT_W; dx++) {
-                    for (int dy = 0; dy < DOT_H; dy++) {
-                        int screen_x = px + dx;
-                        int screen_y = py + dy;
-                        if (screen_x < f->width && screen_y < f->height) {
-                            int offset = (screen_y * f->width + screen_x) * 4;
-                            f->buf[offset + 0] = color.blue;
-                            f->buf[offset + 1] = color.green;
-                            f->buf[offset + 2] = color.red;
-                            f->buf[offset + 3] = 0xFF;
-                        }
-                    }
-                }
-            }
+        int int_val = (int)value;
+        snprintf(val_buf, sizeof(val_buf), "%d", int_val);
+        int total_chars = strlen(val_buf);
+        int leading = digits - total_chars;
+        for (int i = 0; i < leading; i++) {
+            val_buf[i] = ' ';
         }
-        
-        if (buf[i] >= '0' && buf[i] <= '9') {
-            matrix_idx++;
-        } else if (buf[i] == '.') {
-            /* decimal point doesn't advance matrix */
+        val_buf[digits] = '\0';
+        for (int i = 0; i < digits; i++) {
+            bg_buf[i] = '#';
         }
+        bg_buf[digits] = '\0';
     }
-}
-
-static void dot_field_create_with_buf(dot_field_t *f, lv_obj_t *parent, int x, int y, int w, uint8_t *buf, int buf_size)
-{
-    f->width = w;
-    f->height = MATRIX_H;
-    f->buf_size = buf_size;
-    f->buf = buf;
-    memset(f->buf, 0, f->buf_size);
     
-    f->img_dsc.header.magic = LV_IMAGE_HEADER_MAGIC;
-    f->img_dsc.header.cf = LV_COLOR_FORMAT_ARGB8888;
-    f->img_dsc.header.flags = 0;
-    f->img_dsc.header.w = f->width;
-    f->img_dsc.header.h = f->height;
-    f->img_dsc.header.stride = f->width * 4;
-    f->img_dsc.header.reserved_2 = 0;
-    f->img_dsc.data_size = f->buf_size;
-    f->img_dsc.data = f->buf;
-    f->img_dsc.reserved = NULL;
-    f->img_dsc.reserved_2 = NULL;
-    
-    f->img = lv_image_create(parent);
-    if (!f->img) {
-        LOG_ERR("Failed to create dot field image");
-        return;
-    }
-    lv_obj_set_pos(f->img, x, y);
-    lv_obj_set_size(f->img, f->width, f->height);
-    lv_image_set_src(f->img, &f->img_dsc);
-    lv_obj_set_style_bg_opa(f->img, LV_OPA_TRANSP, LV_PART_MAIN);
-    lv_obj_add_flag(f->img, LV_OBJ_FLAG_HIDDEN);
-    
-    f->value = 0;
-    f->decimals = 0;
-}
-
-static void dot_field_set_value(dot_field_t *f, float value, int decimals)
-{
-    if (!f || !f->buf || !f->img) return;
-    
-    f->value = value;
-    f->decimals = decimals;
-    dot_field_render(f);
-    lv_obj_remove_flag(f->img, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_invalidate(f->img);
+    lv_label_set_text(bg, bg_buf);
+    lv_label_set_text(val, val_buf);
 }
 
 static const char *get_moon_string(int phase)
@@ -508,41 +429,41 @@ void watchface_start(void)
     lv_obj_set_pos(seconds_label, 185, CLOCK_Y + CLOCK_H + 6);
     lv_obj_set_width(seconds_label, 40);
 
-    /* Three data fields: label on top, dot matrix value below
+    /* Three data fields: label on top, LED font value below
      * Row 7: RECOVERY HRS:   LAST HR:   WEEK ACT MIN:
      * Row 8:     5.0           80           0      */
     int field_top = CLOCK_Y + CLOCK_H + 16;
-    int field_w = 72;
-
+    int field_h = 20;
+    
     field1_label = lv_label_create(root_page);
     lv_obj_set_style_text_font(field1_label, FONT_LABEL, LV_PART_MAIN);
     lv_obj_set_style_text_color(field1_label, (lv_color_t)LV_COLOR_MAKE(0x52, 0xaa, 0xac), LV_PART_MAIN);
     lv_obj_set_style_text_align(field1_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     lv_label_set_long_mode(field1_label, LV_LABEL_LONG_CLIP);
     lv_obj_set_pos(field1_label, 12, field_top);
-    lv_obj_set_width(field1_label, field_w);
+    lv_obj_set_width(field1_label, FIELD1_W);
 
-    dot_field_create_with_buf(&field1_dm, root_page, 12, field_top + 14, FIELD1_W, field1_buf, FIELD1_BUF_SIZE);
+    led_field_create(root_page, 12, field_top + 14, FIELD1_W, field_h, &field1_bg, &field1_val);
 
     field2_label = lv_label_create(root_page);
     lv_obj_set_style_text_font(field2_label, FONT_LABEL, LV_PART_MAIN);
     lv_obj_set_style_text_color(field2_label, (lv_color_t)LV_COLOR_MAKE(0x52, 0xaa, 0xac), LV_PART_MAIN);
     lv_obj_set_style_text_align(field2_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     lv_label_set_long_mode(field2_label, LV_LABEL_LONG_CLIP);
-    lv_obj_set_pos(field2_label, CENTER_X - field_w/2, field_top);
-    lv_obj_set_width(field2_label, field_w);
+    lv_obj_set_pos(field2_label, CENTER_X - FIELD2_W/2, field_top);
+    lv_obj_set_width(field2_label, FIELD2_W);
 
-    dot_field_create_with_buf(&field2_dm, root_page, CENTER_X - field_w/2 + 10, field_top + 14, FIELD2_W, field2_buf, FIELD2_BUF_SIZE);
+    led_field_create(root_page, CENTER_X - FIELD2_W/2, field_top + 14, FIELD2_W, field_h, &field2_bg, &field2_val);
 
     field3_label = lv_label_create(root_page);
     lv_obj_set_style_text_font(field3_label, FONT_LABEL, LV_PART_MAIN);
     lv_obj_set_style_text_color(field3_label, (lv_color_t)LV_COLOR_MAKE(0x52, 0xaa, 0xac), LV_PART_MAIN);
     lv_obj_set_style_text_align(field3_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     lv_label_set_long_mode(field3_label, LV_LABEL_LONG_CLIP);
-    lv_obj_set_pos(field3_label, 156, field_top);
-    lv_obj_set_width(field3_label, field_w);
+    lv_obj_set_pos(field3_label, SCREEN_W - FIELD3_W - 12, field_top);
+    lv_obj_set_width(field3_label, FIELD3_W);
 
-    dot_field_create_with_buf(&field3_dm, root_page, 186, field_top + 14, FIELD3_W, field3_buf, FIELD3_BUF_SIZE);
+    led_field_create(root_page, SCREEN_W - FIELD3_W - 12, field_top + 14, FIELD3_W, field_h, &field3_bg, &field3_val);
 
     /* Bottom: icon + 5-digit steps + icon
      * Row 9:  ♥   0 8 5 7 3   🔥   */
@@ -728,13 +649,13 @@ void watchface_update_battery(void)
 void watchface_update_sensors(void)
 {
     lv_label_set_text(field1_label, "RECOVERY HRS:");
-    dot_field_set_value(&field1_dm, (float)sim_recovery + 0.0f, 1);
+    led_field_set_value(field1_bg, field1_val, FIELD1_DIGITS, (float)sim_recovery + 0.0f, 1);
 
     lv_label_set_text(field2_label, "LAST HR:");
-    dot_field_set_value(&field2_dm, (float)sim_last_hr, 0);
+    led_field_set_value(field2_bg, field2_val, FIELD2_DIGITS, (float)sim_last_hr, 0);
 
     lv_label_set_text(field3_label, "WEEK ACT MIN:");
-    dot_field_set_value(&field3_dm, (float)sim_week_min, 0);
+    led_field_set_value(field3_bg, field3_val, FIELD3_DIGITS, (float)sim_week_min, 0);
 
     char steps_str[16];
     snprintf(steps_str, sizeof(steps_str), "%05d", sim_steps);
