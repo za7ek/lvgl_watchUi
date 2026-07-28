@@ -4,11 +4,7 @@
  * This font uses 1bpp (1 bit per pixel) format
  */
 
-#ifdef LV_LVGL_H_INCLUDE_SIMPLE
-    #include "lvgl.h"
-#else
-    #include "../../lvgl.h"
-#endif
+#include "lvgl.h"
 
 /*Store the image of the glyphs*/
 static LV_ATTRIBUTE_LARGE_CONST const uint8_t glyph_bitmap[] = {
