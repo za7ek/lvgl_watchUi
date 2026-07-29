@@ -232,8 +232,6 @@ static void led_char_create(lv_obj_t *parent, int x, int y, int w, int h,
     lv_obj_t *val = lv_label_create(parent);
     lv_obj_set_style_text_font(val, FONT_LED, LV_PART_MAIN);
     lv_obj_set_style_text_color(val, LED_BG_COLOR, LV_PART_MAIN);
-    lv_obj_set_style_bg_color(val, (lv_color_t)LV_COLOR_MAKE(0x00, 0x00, 0x00), LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(val, LV_OPA_0, LV_PART_MAIN);
     lv_obj_set_style_text_align(val, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     lv_obj_set_pos(val, x, y);
     lv_obj_set_size(val, w, h);
@@ -265,6 +263,8 @@ static void led_field_set_value(lv_obj_t **bg_labels, lv_obj_t **val_labels,
     char src_buf[8];
     int total_chars;
 
+    if (!bg_labels || !val_labels) return;
+
     if (decimals == 1) {
         snprintf(src_buf, sizeof(src_buf), "%.1f", (double)value);
         total_chars = strlen(src_buf);
@@ -276,17 +276,29 @@ static void led_field_set_value(lv_obj_t **bg_labels, lv_obj_t **val_labels,
     for (int i = 0; i < digits; i++) {
         int src_idx = i - (digits - total_chars);
         if (src_idx < 0 || src_idx >= total_chars) {
-            lv_label_set_text(bg_labels[i], "#");
-            lv_obj_set_style_text_color(bg_labels[i], LED_BG_COLOR, LV_PART_MAIN);
-            lv_label_set_text(val_labels[i], " ");
+            if (bg_labels[i]) {
+                lv_label_set_text(bg_labels[i], "#");
+                lv_obj_set_style_text_color(bg_labels[i], LED_BG_COLOR, LV_PART_MAIN);
+            }
+            if (val_labels[i]) {
+                lv_label_set_text(val_labels[i], " ");
+            }
         } else if (src_buf[src_idx] == '.') {
-            lv_label_set_text(bg_labels[i], ".");
-            lv_obj_set_style_text_color(bg_labels[i], LED_FG_COLOR, LV_PART_MAIN);
-            lv_label_set_text(val_labels[i], " ");
+            if (bg_labels[i]) {
+                lv_label_set_text(bg_labels[i], ".");
+                lv_obj_set_style_text_color(bg_labels[i], LED_FG_COLOR, LV_PART_MAIN);
+            }
+            if (val_labels[i]) {
+                lv_label_set_text(val_labels[i], " ");
+            }
         } else {
-            lv_label_set_text(bg_labels[i], "#");
-            lv_obj_set_style_text_color(bg_labels[i], LED_FG_COLOR, LV_PART_MAIN);
-            lv_label_set_text(val_labels[i], &src_buf[src_idx]);
+            if (bg_labels[i]) {
+                lv_label_set_text(bg_labels[i], "#");
+                lv_obj_set_style_text_color(bg_labels[i], LED_FG_COLOR, LV_PART_MAIN);
+            }
+            if (val_labels[i]) {
+                lv_label_set_text(val_labels[i], &src_buf[src_idx]);
+            }
         }
     }
 }
