@@ -225,7 +225,7 @@ static void led_field_create(lv_obj_t *parent, int x, int y, int w, int h,
     lv_obj_t *bg = lv_label_create(parent);
     lv_obj_set_style_text_font(bg, FONT_LED, LV_PART_MAIN);
     lv_obj_set_style_text_color(bg, LED_FG_COLOR, LV_PART_MAIN);   /* #字形 → 白色填充35方块 */
-    lv_obj_set_style_bg_color(bg, LV_COLOR_BLACK, LV_PART_MAIN);    /* 间隙 → 黑色（方块间清晰分隔线） */
+    lv_obj_set_style_bg_color(bg, (lv_color_t)LV_COLOR_MAKE(0x00, 0x00, 0x00), LV_PART_MAIN);  /* 间隙 → 黑色（方块间清晰分隔线） */
     lv_obj_set_style_bg_opa(bg, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_text_align(bg, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     lv_obj_set_pos(bg, x, y);
