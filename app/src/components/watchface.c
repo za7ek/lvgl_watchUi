@@ -44,22 +44,22 @@ LOG_MODULE_REGISTER(watchface, LOG_LEVEL_INF);
 #define FONT_BIG        &lv_font_cjk_16
 #define FONT_LED        &lv_font_led   /* 用于字段数值行 + 倒数第二行steps（LED点阵风格） */
 
-#define LED_DIGIT_W 18
+#define LED_DIGIT_W 18    /* 每个字符adv_w=288/16=18px */
 #define LED_DIGIT_H 20
-#define LED_FIELD_GAP 2   /* 字段内部矩阵间距：2像素 */
+#define LED_LETTER_SPACE (-2)  /* 字符间间距：字体内置4px + (-2) = 2px实际间距 */
 #define FIELD1_DIGITS 4
 #define FIELD2_DIGITS 4
 #define FIELD3_DIGITS 4
 
-/* 字段宽度 = DIGITS * DIGIT_W + (DIGITS - 1) * FIELD_GAP
- * 例：4位数字 = 4*18 + 3*2 = 78px
- *    5位数字 = 5*18 + 4*2 = 98px */
-#define FIELD1_W (FIELD1_DIGITS * LED_DIGIT_W + (FIELD1_DIGITS - 1) * LED_FIELD_GAP)
-#define FIELD2_W (FIELD2_DIGITS * LED_DIGIT_W + (FIELD2_DIGITS - 1) * LED_FIELD_GAP)
-#define FIELD3_W (FIELD3_DIGITS * LED_DIGIT_W + (FIELD3_DIGITS - 1) * LED_FIELD_GAP)
+/* 字段宽度计算：DIGITS*ADV_W + (DIGITS-1)*LETTER_SPACE
+ * 例：4位 = 4*18 + 3*(-2) = 66px（字符间实际间距2px）
+ *    5位 = 5*18 + 4*(-2) = 82px */
+#define FIELD1_W (FIELD1_DIGITS * LED_DIGIT_W + (FIELD1_DIGITS - 1) * LED_LETTER_SPACE)
+#define FIELD2_W (FIELD2_DIGITS * LED_DIGIT_W + (FIELD2_DIGITS - 1) * LED_LETTER_SPACE)
+#define FIELD3_W (FIELD3_DIGITS * LED_DIGIT_W + (FIELD3_DIGITS - 1) * LED_LETTER_SPACE)
 
 #define BOTTOM5_DIGITS 5
-#define BOTTOM5_W (BOTTOM5_DIGITS * LED_DIGIT_W + (BOTTOM5_DIGITS - 1) * LED_FIELD_GAP)
+#define BOTTOM5_W (BOTTOM5_DIGITS * LED_DIGIT_W + (BOTTOM5_DIGITS - 1) * LED_LETTER_SPACE)
 
 #define LED_BG_COLOR  ((lv_color_t)LV_COLOR_MAKE(0x08, 0x30, 0x39))
 #define LED_FG_COLOR  ((lv_color_t)LV_COLOR_MAKE(0xff, 0xff, 0xff))
@@ -229,6 +229,7 @@ static void led_field_create(lv_obj_t *parent, int x, int y, int w, int h,
     lv_obj_t *bg = lv_label_create(parent);
     lv_obj_set_style_text_font(bg, FONT_LED, LV_PART_MAIN);
     lv_obj_set_style_text_color(bg, LED_BG_COLOR, LV_PART_MAIN);   /* #字形 → 墨绿色填充35方块 */
+    lv_obj_set_style_text_letter_space(bg, LED_LETTER_SPACE, LV_PART_MAIN);  /* 字符间距2px */
     lv_obj_set_style_bg_color(bg, (lv_color_t)LV_COLOR_MAKE(0x00, 0x00, 0x00), LV_PART_MAIN);  /* 间隙 → 黑色网格线 */
     lv_obj_set_style_bg_opa(bg, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_text_align(bg, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
@@ -245,6 +246,7 @@ static void led_field_create(lv_obj_t *parent, int x, int y, int w, int h,
     lv_obj_t *val = lv_label_create(parent);
     lv_obj_set_style_text_font(val, FONT_LED, LV_PART_MAIN);
     lv_obj_set_style_text_color(val, LED_FG_COLOR, LV_PART_MAIN);   /* 数字段→白色覆盖（正相） */
+    lv_obj_set_style_text_letter_space(val, LED_LETTER_SPACE, LV_PART_MAIN);  /* 字符间距2px */
     lv_obj_set_style_text_align(val, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     lv_obj_set_pos(val, x, y);
     lv_obj_set_size(val, w, h);
