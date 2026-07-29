@@ -207,21 +207,19 @@ static lv_obj_t *clock_col_create(lv_obj_t *parent, lv_coord_t x, lv_coord_t w,
 static void led_field_create(lv_obj_t *parent, int x, int y, int w, int h,
                               lv_obj_t **bg_out, lv_obj_t **val_out)
 {
-    /* 反相结构：LED字体数字字形是"反相"的
-     *   不透明像素 = 非段区域（覆盖墨绿）
-     *   透明像素 = 段区域（透出底层白色）
+    /* 反相结构：
+     *   LED数字字形是"反相"的：不透明=非段(覆盖墨绿)，透明=段(透出底层白色)
+     *   LED小数点是"正相"的：不透明=小数点本身
      *
-     * Layer 0 (bg label 底色): bg_color=BLACK → 间隙黑色
-     * Layer 1 (bg label 文字): text=白, text=# → 35方块全白
-     * Layer 2 (val label 文字): text=墨绿, text=数字 → 非段墨绿覆盖，段透明露白
-     *
-     * 空槽位：bg=空格（透明）→ 全黑（不显示白色外框）
-     * 有数字：bg=#（白35方块），val=数字（墨绿非段）→ 段白非段墨绿
+     * Layer 0 (bg): bg_color=BLACK → 间隙黑色
+     * Layer 1 (bg text): text=#(白) → 35方块全白
+     * Layer 2 (val text): text=数字(墨绿) → 非段墨绿，段透明露白
+     *   小数点特殊处理：val用空格，让bg的白色小数点透出
      */
     lv_obj_t *bg = lv_label_create(parent);
     lv_obj_set_style_text_font(bg, FONT_LED, LV_PART_MAIN);
-    lv_obj_set_style_text_color(bg, LED_FG_COLOR, LV_PART_MAIN);   /* #→白色35方块底 */
-    lv_obj_set_style_text_letter_space(bg, -2, LV_PART_MAIN);       /* 压缩间距到2px */
+    lv_obj_set_style_text_color(bg, LED_FG_COLOR, LV_PART_MAIN);
+    lv_obj_set_style_text_letter_space(bg, -2, LV_PART_MAIN);
     lv_obj_set_style_bg_color(bg, (lv_color_t)LV_COLOR_MAKE(0x00, 0x00, 0x00), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(bg, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_text_align(bg, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
@@ -237,13 +235,14 @@ static void led_field_create(lv_obj_t *parent, int x, int y, int w, int h,
 
     lv_obj_t *val = lv_label_create(parent);
     lv_obj_set_style_text_font(val, FONT_LED, LV_PART_MAIN);
-    lv_obj_set_style_text_color(val, LED_BG_COLOR, LV_PART_MAIN);   /* 数字非段→墨绿覆盖 */
-    lv_obj_set_style_text_letter_space(val, -2, LV_PART_MAIN);       /* 与bg保持对齐 */
+    lv_obj_set_style_text_color(val, LED_BG_COLOR, LV_PART_MAIN);
+    lv_obj_set_style_text_letter_space(val, -2, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(val, (lv_color_t)LV_COLOR_MAKE(0x00, 0x00, 0x00), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(val, LV_OPA_0, LV_PART_MAIN);
     lv_obj_set_style_text_align(val, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     lv_obj_set_pos(val, x, y);
     lv_obj_set_size(val, w, h);
     lv_obj_set_style_opa(val, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(val, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_border_width(val, 0, LV_PART_MAIN);
     lv_obj_set_style_outline_width(val, 0, LV_PART_MAIN);
     lv_obj_set_style_shadow_width(val, 0, LV_PART_MAIN);
@@ -264,9 +263,9 @@ static void led_field_set_value(lv_obj_t *bg, lv_obj_t *val, int digits, float v
     char src_buf[8];
 
     /* 反相结构：
-     *   空槽位：bg=空格(透明) → 全黑（bg_label底色），无白色外框
-     *   有数字：bg=#(白35方块)，val=数字(墨绿非段) → 段白非段墨绿
-     *   小数点：bg=.(白色小数点)，val=.(墨绿) → 小数点段白
+     *   空槽位：bg=空格(透明) → 全黑，无白色外框
+     *   数字位：bg=#(白35方块)，val=数字(墨绿非段) → 段白非段墨绿
+     *   小数点：小数点是正相结构(不透明=本身)，val用空格让bg的白色小数点透出
      */
 
     if (decimals == 1) {
@@ -276,13 +275,13 @@ static void led_field_set_value(lv_obj_t *bg, lv_obj_t *val, int digits, float v
         for (int i = 0; i < digits; i++) {
             int src_idx = i - (digits - total_chars);
             if (src_idx < 0 || src_idx >= total_chars) {
-                /* 空槽位：bg=空格(透明) → 黑色，无白色外框 */
+                /* 空槽位：bg=空格(透明) → 黑色 */
                 bg_buf[i] = ' ';
                 val_buf[i] = ' ';
             } else if (src_buf[src_idx] == '.') {
-                /* 小数点：bg=.白色小数点，val=.墨绿覆盖 */
+                /* 小数点：bg=.白色，val=空格(透明) → 小数点保持白色 */
                 bg_buf[i] = '.';
-                val_buf[i] = '.';
+                val_buf[i] = ' ';
             } else {
                 /* 数字位：bg=#白35方块，val=数字墨绿非段 */
                 bg_buf[i] = '#';
@@ -299,7 +298,7 @@ static void led_field_set_value(lv_obj_t *bg, lv_obj_t *val, int digits, float v
         for (int i = 0; i < digits; i++) {
             int src_idx = i - (digits - total_chars);
             if (src_idx < 0 || src_idx >= total_chars) {
-                /* 空槽位：bg=空格(透明) → 黑色，无白色外框 */
+                /* 空槽位：bg=空格(透明) → 黑色 */
                 bg_buf[i] = ' ';
                 val_buf[i] = ' ';
             } else {
