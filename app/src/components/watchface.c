@@ -205,26 +205,30 @@ static lv_obj_t *clock_col_create(lv_obj_t *parent, lv_coord_t x, lv_coord_t w,
 static void led_field_create(lv_obj_t *parent, int x, int y, int w, int h,
                               lv_obj_t **bg_out, lv_obj_t **val_out)
 {
-    /* 三层渲染（仿时钟列），颜色反转：段内=白色，其他方块=墨绿色，间隙=黑色分隔
+    /* 三层渲染（仿时钟列）：段内=白色，其他方块=墨绿色，间隙=黑色分隔
+     *
+     * LED字体的数字字形是"正相结构"（和时钟数字不同）：
+     *   - 不透明像素 = 段亮区域   （用 val 白色覆盖）
+     *   - 透明像素   = 非段区域   （露下层 bg 的墨绿方块）
      *
      * Layer 0 (bg label 自身底色):  bg_color=BLACK, bg_opa=COVER
      *   → 负责填充35个小方块之间的间隙为黑色（作为方块间的清晰分隔线）
      *
-     * Layer 1 (bg label 文字 FG):  text=LED_FG_COLOR(白), text=#字符
-     *   → # 的不透明像素 = 35个小方块实体，全部画白色（每格2x2方块全白）
+     * Layer 1 (bg label 文字 FG):  text=LED_BG_COLOR(墨绿), text=#字符
+     *   → # 的不透明像素 = 35个小方块实体，全部画墨绿色
      *
-     * Layer 2 (val label 文字 FG): text=LED_BG_COLOR(墨绿), text=数字/.字符
-     *   → 数字的不透明像素 = "非段"区域（反相结构，和时钟数字一样）
-     *   → 覆盖非段为墨绿色，透明区域=段部分，透下层的白色方块=段亮白色
+     * Layer 2 (val label 文字 FG): text=LED_FG_COLOR(白), text=数字/.字符
+     *   → 数字的不透明像素 = "段"区域（正相结构）
+     *   → 覆盖段为白色，透明区域=非段，透下层的墨绿方块=非段墨绿色
      *
      * 最终视觉：
-     *   小方块的段内区域：白色（下层#的白色，val透明）
-     *   小方块的非段区域：墨绿色（val覆盖）
+     *   小方块的段内区域：白色（val覆盖）
+     *   小方块的非段区域：墨绿色（下层#的墨绿，val透明）
      *   小方块间1px间隙：黑色（清晰分隔方块的网格线）
      */
     lv_obj_t *bg = lv_label_create(parent);
     lv_obj_set_style_text_font(bg, FONT_LED, LV_PART_MAIN);
-    lv_obj_set_style_text_color(bg, LED_FG_COLOR, LV_PART_MAIN);   /* #字形 → 白色填充35方块 */
+    lv_obj_set_style_text_color(bg, LED_BG_COLOR, LV_PART_MAIN);   /* #字形 → 墨绿色填充35方块 */
     lv_obj_set_style_bg_color(bg, (lv_color_t)LV_COLOR_MAKE(0x00, 0x00, 0x00), LV_PART_MAIN);  /* 间隙 → 黑色（方块间清晰分隔线） */
     lv_obj_set_style_bg_opa(bg, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_text_align(bg, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
@@ -240,7 +244,7 @@ static void led_field_create(lv_obj_t *parent, int x, int y, int w, int h,
 
     lv_obj_t *val = lv_label_create(parent);
     lv_obj_set_style_text_font(val, FONT_LED, LV_PART_MAIN);
-    lv_obj_set_style_text_color(val, LED_BG_COLOR, LV_PART_MAIN);   /* 数字非段覆盖→墨绿色（反相） */
+    lv_obj_set_style_text_color(val, LED_FG_COLOR, LV_PART_MAIN);   /* 数字段→白色覆盖（正相） */
     lv_obj_set_style_text_align(val, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     lv_obj_set_pos(val, x, y);
     lv_obj_set_size(val, w, h);
@@ -265,11 +269,10 @@ static void led_field_set_value(lv_obj_t *bg, lv_obj_t *val, int digits, float v
     char val_buf[8];
     char src_buf[8];
 
-    /* 注意：LED字体的数字字形是"反相结构"（和时钟一致）
-     *   - 不透明像素 = 非段区域（用墨绿色覆盖）
-     *   - 透明像素   = 段区域   （露下层白色方块底色）
-     *   '.'小数点字形是"正相结构"（不透明=段亮）
-     *   - bg用白色画，val用空格跳过（不覆盖）
+    /* LED字体的数字/小数点字形都是"正相结构"：
+     *   - 不透明像素 = 段亮区域（val用白色覆盖）
+     *   - 透明像素   = 非段区域（露下层 bg 的墨绿方块）
+     *   '.' 和 '0-9' 处理完全一致：bg=#/.画墨绿底, val=数字/.画白色段
      */
 
     if (decimals == 1) {
@@ -282,11 +285,11 @@ static void led_field_set_value(lv_obj_t *bg, lv_obj_t *val, int digits, float v
                 bg_buf[i] = ' ';
                 val_buf[i] = ' ';
             } else if (src_buf[src_idx] == '.') {
-                /* 小数点：正相结构 → bg用.（白画段），val用空格（不覆盖） */
+                /* 小数点：正相 → bg用.（墨绿画方块底），val用.（白色画段） */
                 bg_buf[i] = '.';
-                val_buf[i] = ' ';
+                val_buf[i] = '.';
             } else {
-                /* 数字位：反相结构 → bg用#（白填35方块），val用数字（墨绿覆盖非段） */
+                /* 数字位：正相 → bg用#（墨绿填35方块），val用数字（白色画段） */
                 bg_buf[i] = '#';
                 val_buf[i] = src_buf[src_idx];
             }
@@ -304,7 +307,7 @@ static void led_field_set_value(lv_obj_t *bg, lv_obj_t *val, int digits, float v
                 bg_buf[i] = ' ';
                 val_buf[i] = ' ';
             } else {
-                /* 数字位：反相结构 → bg用#（白填35方块），val用数字（墨绿覆盖非段） */
+                /* 数字位：正相 → bg用#（墨绿填35方块），val用数字（白色画段） */
                 bg_buf[i] = '#';
                 val_buf[i] = src_buf[src_idx];
             }
