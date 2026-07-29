@@ -547,7 +547,7 @@ void watchface_start(void)
     int field_top = CLOCK_Y + CLOCK_H + 22;
     int field_h = LED_DIGIT_H;
     int label_h = 10;
-    int field_gap = 10;   /* 字段间间距：10像素 */
+    int field_gap = 6;   /* 字段间间距：6像素（比日期行窄） */
     int total_field_w = 3 * FIELD1_W + 2 * field_gap;
     int field_start_x = CENTER_X - total_field_w / 2;
 
