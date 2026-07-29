@@ -46,12 +46,14 @@ LOG_MODULE_REGISTER(watchface, LOG_LEVEL_INF);
 
 #define LED_DIGIT_W 18
 #define LED_DIGIT_H 20
-#define LED_FIELD_GAP 0
+#define LED_FIELD_GAP 2   /* 字段内部矩阵间距：2像素 */
 #define FIELD1_DIGITS 4
 #define FIELD2_DIGITS 4
 #define FIELD3_DIGITS 4
 
-/* 字段宽度恢复为 LED 点阵宽度计算（数值行使用 LED 点阵字体） */
+/* 字段宽度 = DIGITS * DIGIT_W + (DIGITS - 1) * FIELD_GAP
+ * 例：4位数字 = 4*18 + 3*2 = 78px
+ *    5位数字 = 5*18 + 4*2 = 98px */
 #define FIELD1_W (FIELD1_DIGITS * LED_DIGIT_W + (FIELD1_DIGITS - 1) * LED_FIELD_GAP)
 #define FIELD2_W (FIELD2_DIGITS * LED_DIGIT_W + (FIELD2_DIGITS - 1) * LED_FIELD_GAP)
 #define FIELD3_W (FIELD3_DIGITS * LED_DIGIT_W + (FIELD3_DIGITS - 1) * LED_FIELD_GAP)
@@ -543,7 +545,7 @@ void watchface_start(void)
     int field_top = CLOCK_Y + CLOCK_H + 22;
     int field_h = LED_DIGIT_H;
     int label_h = 10;
-    int field_gap = 3;
+    int field_gap = 10;   /* 字段间间距：10像素 */
     int total_field_w = 3 * FIELD1_W + 2 * field_gap;
     int field_start_x = CENTER_X - total_field_w / 2;
 
