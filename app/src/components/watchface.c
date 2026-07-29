@@ -44,22 +44,22 @@ LOG_MODULE_REGISTER(watchface, LOG_LEVEL_INF);
 #define FONT_BIG        &lv_font_cjk_16
 #define FONT_LED        &lv_font_led   /* 用于字段数值行 + 倒数第二行steps（LED点阵风格） */
 
-#define LED_DIGIT_W 18    /* 每个字符adv_w=288/16=18px */
+#define LED_DIGIT_W 18    /* adv_w=288/16=18px, ofs_x=4 → 内置4px间距 */
 #define LED_DIGIT_H 20
-#define LED_LETTER_SPACE (-2)  /* 字符间间距：字体内置4px + (-2) = 2px实际间距 */
+#define LED_FIELD_GAP 2   /* 字段内字符间距：实际2px */
 #define FIELD1_DIGITS 4
 #define FIELD2_DIGITS 4
 #define FIELD3_DIGITS 4
 
-/* 字段宽度计算：DIGITS*ADV_W + (DIGITS-1)*LETTER_SPACE
- * 例：4位 = 4*18 + 3*(-2) = 66px（字符间实际间距2px）
- *    5位 = 5*18 + 4*(-2) = 82px */
-#define FIELD1_W (FIELD1_DIGITS * LED_DIGIT_W + (FIELD1_DIGITS - 1) * LED_LETTER_SPACE)
-#define FIELD2_W (FIELD2_DIGITS * LED_DIGIT_W + (FIELD2_DIGITS - 1) * LED_LETTER_SPACE)
-#define FIELD3_W (FIELD3_DIGITS * LED_DIGIT_W + (FIELD3_DIGITS - 1) * LED_LETTER_SPACE)
+/* 字段宽度：DIGITS*ADV_W + (DIGITS-1)*FIELD_GAP
+ * ADV_W=18px, 额外加2px间距 → letter_space=-2实现2px实际间距
+ * FIELD_W = 4*18 + 3*2 = 78px */
+#define FIELD1_W (FIELD1_DIGITS * LED_DIGIT_W + (FIELD1_DIGITS - 1) * LED_FIELD_GAP)
+#define FIELD2_W (FIELD2_DIGITS * LED_DIGIT_W + (FIELD2_DIGITS - 1) * LED_FIELD_GAP)
+#define FIELD3_W (FIELD3_DIGITS * LED_DIGIT_W + (FIELD3_DIGITS - 1) * LED_FIELD_GAP)
 
 #define BOTTOM5_DIGITS 5
-#define BOTTOM5_W (BOTTOM5_DIGITS * LED_DIGIT_W + (BOTTOM5_DIGITS - 1) * LED_LETTER_SPACE)
+#define BOTTOM5_W (BOTTOM5_DIGITS * LED_DIGIT_W + (BOTTOM5_DIGITS - 1) * LED_FIELD_GAP)
 
 #define LED_BG_COLOR  ((lv_color_t)LV_COLOR_MAKE(0x08, 0x30, 0x39))
 #define LED_FG_COLOR  ((lv_color_t)LV_COLOR_MAKE(0xff, 0xff, 0xff))
@@ -207,30 +207,22 @@ static lv_obj_t *clock_col_create(lv_obj_t *parent, lv_coord_t x, lv_coord_t w,
 static void led_field_create(lv_obj_t *parent, int x, int y, int w, int h,
                               lv_obj_t **bg_out, lv_obj_t **val_out)
 {
-    /* 三层渲染：段内=白色，其他方块=墨绿色，间隙=黑色分隔
+    /* 反相结构：LED字体数字字形是"反相"的
+     *   不透明像素 = 非段区域（覆盖墨绿）
+     *   透明像素 = 段区域（透出底层白色）
      *
-     * LED字体的数字字形是"正相结构"：不透明像素=段亮区域，透明像素=非段
+     * Layer 0 (bg label 底色): bg_color=BLACK → 间隙黑色
+     * Layer 1 (bg label 文字): text=白, text=# → 35方块全白
+     * Layer 2 (val label 文字): text=墨绿, text=数字 → 非段墨绿覆盖，段透明露白
      *
-     * Layer 0 (bg label 自身底色):  bg_color=BLACK, bg_opa=COVER
-     *   → 间隙填充黑色（方块间清晰网格线）
-     *
-     * Layer 1 (bg label 文字 FG):  text=LED_BG_COLOR(墨绿), text=#字符
-     *   → # 不透明像素 = 35个小方块实体，全部画墨绿色
-     *
-     * Layer 2 (val label 文字 FG): text=LED_FG_COLOR(白), text=数字/.字符
-     *   → 数字不透明像素 = 段区域（正相结构）
-     *   → 覆盖段为白色，透明区域=非段，透下层墨绿方块=非段墨绿色
-     *
-     * 最终视觉：
-     *   小方块段内区域：白色（val覆盖）
-     *   小方块非段区域：墨绿色（下层#的墨绿，val透明）
-     *   小方块间1px间隙：黑色（清晰分隔）
+     * 空槽位：bg=空格（透明）→ 全黑（不显示白色外框）
+     * 有数字：bg=#（白35方块），val=数字（墨绿非段）→ 段白非段墨绿
      */
     lv_obj_t *bg = lv_label_create(parent);
     lv_obj_set_style_text_font(bg, FONT_LED, LV_PART_MAIN);
-    lv_obj_set_style_text_color(bg, LED_BG_COLOR, LV_PART_MAIN);   /* #字形 → 墨绿色填充35方块 */
-    lv_obj_set_style_text_letter_space(bg, LED_LETTER_SPACE, LV_PART_MAIN);  /* 字符间距2px */
-    lv_obj_set_style_bg_color(bg, (lv_color_t)LV_COLOR_MAKE(0x00, 0x00, 0x00), LV_PART_MAIN);  /* 间隙 → 黑色网格线 */
+    lv_obj_set_style_text_color(bg, LED_FG_COLOR, LV_PART_MAIN);   /* #→白色35方块底 */
+    lv_obj_set_style_text_letter_space(bg, -2, LV_PART_MAIN);       /* 压缩间距到2px */
+    lv_obj_set_style_bg_color(bg, (lv_color_t)LV_COLOR_MAKE(0x00, 0x00, 0x00), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(bg, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_text_align(bg, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     lv_obj_set_pos(bg, x, y);
@@ -245,8 +237,8 @@ static void led_field_create(lv_obj_t *parent, int x, int y, int w, int h,
 
     lv_obj_t *val = lv_label_create(parent);
     lv_obj_set_style_text_font(val, FONT_LED, LV_PART_MAIN);
-    lv_obj_set_style_text_color(val, LED_FG_COLOR, LV_PART_MAIN);   /* 数字段→白色覆盖（正相） */
-    lv_obj_set_style_text_letter_space(val, LED_LETTER_SPACE, LV_PART_MAIN);  /* 字符间距2px */
+    lv_obj_set_style_text_color(val, LED_BG_COLOR, LV_PART_MAIN);   /* 数字非段→墨绿覆盖 */
+    lv_obj_set_style_text_letter_space(val, -2, LV_PART_MAIN);       /* 与bg保持对齐 */
     lv_obj_set_style_text_align(val, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     lv_obj_set_pos(val, x, y);
     lv_obj_set_size(val, w, h);
@@ -271,10 +263,10 @@ static void led_field_set_value(lv_obj_t *bg, lv_obj_t *val, int digits, float v
     char val_buf[8];
     char src_buf[8];
 
-    /* 正相结构：不透明像素=段亮区域，透明=非段
-     *   bg:  text=#/. (墨绿) → 35方块/小数点画墨绿
-     *   val: text=数字/. (白) → 段白色覆盖，非段透明露墨绿
-     *   空槽位：bg=# (墨绿35方块), val=空格 (透明) → 全墨绿35方块
+    /* 反相结构：
+     *   空槽位：bg=空格(透明) → 全黑（bg_label底色），无白色外框
+     *   有数字：bg=#(白35方块)，val=数字(墨绿非段) → 段白非段墨绿
+     *   小数点：bg=.(白色小数点)，val=.(墨绿) → 小数点段白
      */
 
     if (decimals == 1) {
@@ -284,15 +276,15 @@ static void led_field_set_value(lv_obj_t *bg, lv_obj_t *val, int digits, float v
         for (int i = 0; i < digits; i++) {
             int src_idx = i - (digits - total_chars);
             if (src_idx < 0 || src_idx >= total_chars) {
-                /* 空槽位：用#显示35墨绿方块矩阵 */
-                bg_buf[i] = '#';
+                /* 空槽位：bg=空格(透明) → 黑色，无白色外框 */
+                bg_buf[i] = ' ';
                 val_buf[i] = ' ';
             } else if (src_buf[src_idx] == '.') {
-                /* 小数点：bg=.墨绿, val=.白色覆盖 */
+                /* 小数点：bg=.白色小数点，val=.墨绿覆盖 */
                 bg_buf[i] = '.';
                 val_buf[i] = '.';
             } else {
-                /* 数字位：bg=#墨绿35方块, val=数字白色段覆盖 */
+                /* 数字位：bg=#白35方块，val=数字墨绿非段 */
                 bg_buf[i] = '#';
                 val_buf[i] = src_buf[src_idx];
             }
@@ -307,11 +299,11 @@ static void led_field_set_value(lv_obj_t *bg, lv_obj_t *val, int digits, float v
         for (int i = 0; i < digits; i++) {
             int src_idx = i - (digits - total_chars);
             if (src_idx < 0 || src_idx >= total_chars) {
-                /* 空槽位：用#显示35墨绿方块矩阵 */
-                bg_buf[i] = '#';
+                /* 空槽位：bg=空格(透明) → 黑色，无白色外框 */
+                bg_buf[i] = ' ';
                 val_buf[i] = ' ';
             } else {
-                /* 数字位：bg=#墨绿35方块, val=数字白色段覆盖 */
+                /* 数字位：bg=#白35方块，val=数字墨绿非段 */
                 bg_buf[i] = '#';
                 val_buf[i] = src_buf[src_idx];
             }
@@ -547,7 +539,7 @@ void watchface_start(void)
     int field_top = CLOCK_Y + CLOCK_H + 22;
     int field_h = LED_DIGIT_H;
     int label_h = 10;
-    int field_gap = 6;   /* 字段间间距：6像素（比日期行窄） */
+    int field_gap = 3;   /* 字段间间距：3像素（适配屏幕宽度240px） */
     int total_field_w = 3 * FIELD1_W + 2 * field_gap;
     int field_start_x = CENTER_X - total_field_w / 2;
 
