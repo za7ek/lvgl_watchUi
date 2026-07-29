@@ -205,10 +205,10 @@ static lv_obj_t *clock_col_create(lv_obj_t *parent, lv_coord_t x, lv_coord_t w,
 static void led_field_create(lv_obj_t *parent, int x, int y, int w, int h,
                               lv_obj_t **bg_out, lv_obj_t **val_out)
 {
-    /* 三层渲染（仿时钟列），颜色反转：段内=白色，其他方块/间隙=墨绿色
+    /* 三层渲染（仿时钟列），颜色反转：段内=白色，其他方块=墨绿色，间隙=黑色分隔
      *
-     * Layer 0 (bg label 自身底色):  bg_color=LED_BG_COLOR(墨绿), bg_opa=COVER
-     *   → 负责填充35个小方块之间的间隙为墨绿色（文字字形的透明部分透出的底色）
+     * Layer 0 (bg label 自身底色):  bg_color=BLACK, bg_opa=COVER
+     *   → 负责填充35个小方块之间的间隙为黑色（作为方块间的清晰分隔线）
      *
      * Layer 1 (bg label 文字 FG):  text=LED_FG_COLOR(白), text=#字符
      *   → # 的不透明像素 = 35个小方块实体，全部画白色（每格2x2方块全白）
@@ -220,12 +220,12 @@ static void led_field_create(lv_obj_t *parent, int x, int y, int w, int h,
      * 最终视觉：
      *   小方块的段内区域：白色（下层#的白色，val透明）
      *   小方块的非段区域：墨绿色（val覆盖）
-     *   小方块间1px间隙：墨绿色（bg label底色，#字形间隙部分透明）
+     *   小方块间1px间隙：黑色（清晰分隔方块的网格线）
      */
     lv_obj_t *bg = lv_label_create(parent);
     lv_obj_set_style_text_font(bg, FONT_LED, LV_PART_MAIN);
     lv_obj_set_style_text_color(bg, LED_FG_COLOR, LV_PART_MAIN);   /* #字形 → 白色填充35方块 */
-    lv_obj_set_style_bg_color(bg, LED_BG_COLOR, LV_PART_MAIN);     /* 间隙 → 墨绿色（文字透明透出） */
+    lv_obj_set_style_bg_color(bg, LV_COLOR_BLACK, LV_PART_MAIN);    /* 间隙 → 黑色（方块间清晰分隔线） */
     lv_obj_set_style_bg_opa(bg, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_text_align(bg, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     lv_obj_set_pos(bg, x, y);
