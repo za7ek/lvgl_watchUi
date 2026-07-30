@@ -193,6 +193,10 @@ void icon_draw(lv_obj_t *parent, icon_t icon, lv_coord_t x, lv_coord_t y, lv_col
     lv_obj_set_style_radius(obj, 0, LV_PART_MAIN);
 
     icon_info_t *info = (icon_info_t *)lv_malloc(sizeof(icon_info_t));
+    if (!info) {
+        lv_obj_del(obj);
+        return;
+    }
     info->icon = icon;
     info->color = color;
     lv_obj_set_user_data(obj, info);

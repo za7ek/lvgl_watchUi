@@ -36,7 +36,7 @@ LOG_MODULE_REGISTER(watchface, LOG_LEVEL_INF);
  * 第二行时间、日期行：FONT_DATA = montserrat_12 / FONT_TIME_SMALL = montserrat_10
  * 月相文字（更小）：FONT_MOON = montserrat_8
  */
-#define FONT_LABEL      &lv_font_montserrat_8
+#define FONT_LABEL      &lv_font_xsmol
 #define FONT_DATA       &lv_font_montserrat_12
 #define FONT_TIME_SMALL &lv_font_montserrat_10
 #define FONT_MOON       &lv_font_montserrat_8
@@ -44,19 +44,23 @@ LOG_MODULE_REGISTER(watchface, LOG_LEVEL_INF);
 #define FONT_BIG        &lv_font_cjk_16
 #define FONT_LED        &lv_font_led   /* 用于字段数值行 + 倒数第二行steps（LED点阵风格） */
 
-#define LED_DIGIT_W 18    /* adv_w=288/16=18px, ofs_x=4 → 内置4px间距 */
-#define LED_DIGIT_H 20
-#define LED_FIELD_GAP 2   /* 字段内字符间距：实际2px */
+#define LED_DIGIT_W 16    /* adv_w=16px (14px char + 2px gap) */
+#define LED_DIGIT_H 20    /* 2x2 blocks, 1px gaps → 20px tall */
+#define LED_FIELD_GAP 0   /* no extra gap; spacing is in adv_w */
 #define FIELD1_DIGITS 4
 #define FIELD2_DIGITS 4
 #define FIELD3_DIGITS 4
 
-/* 字段宽度：DIGITS*ADV_W + (DIGITS-1)*FIELD_GAP
- * ADV_W=18px, 额外加2px间距 → letter_space=-2实现2px实际间距
- * FIELD_W = 4*18 + 3*2 = 78px */
-#define FIELD1_W (FIELD1_DIGITS * LED_DIGIT_W + (FIELD1_DIGITS - 1) * LED_FIELD_GAP)
-#define FIELD2_W (FIELD2_DIGITS * LED_DIGIT_W + (FIELD2_DIGITS - 1) * LED_FIELD_GAP)
-#define FIELD3_W (FIELD3_DIGITS * LED_DIGIT_W + (FIELD3_DIGITS - 1) * LED_FIELD_GAP)
+/* Matrix (digit field) width: DIGITS*ADV_W
+ * FIELD_W = 4*16 = 64px, matches label text width */
+#define FIELD1_W (FIELD1_DIGITS * LED_DIGIT_W)
+#define FIELD2_W (FIELD2_DIGITS * LED_DIGIT_W)
+#define FIELD3_W (FIELD3_DIGITS * LED_DIGIT_W)
+
+/* Label width: same as matrix width for left-aligned layout */
+#define LABEL1_W FIELD1_W
+#define LABEL2_W FIELD2_W
+#define LABEL3_W FIELD3_W
 
 #define BOTTOM5_DIGITS 5
 #define BOTTOM5_W (BOTTOM5_DIGITS * LED_DIGIT_W + (BOTTOM5_DIGITS - 1) * LED_FIELD_GAP)
@@ -213,9 +217,16 @@ static lv_obj_t *clock_col_create(lv_obj_t *parent, lv_coord_t x, lv_coord_t w,
 static void led_char_create(lv_obj_t *parent, int x, int y, int w, int h,
                              lv_obj_t **bg_out, lv_obj_t **val_out)
 {
+    *bg_out = NULL;
+    *val_out = NULL;
+
+    /* Background label: shows '#' (all 35 dots) in DARK GREEN */
     lv_obj_t *bg = lv_label_create(parent);
+    if (!bg) {
+        return;
+    }
     lv_obj_set_style_text_font(bg, FONT_LED, LV_PART_MAIN);
-    lv_obj_set_style_text_color(bg, LED_FG_COLOR, LV_PART_MAIN);
+    lv_obj_set_style_text_color(bg, LED_BG_COLOR, LV_PART_MAIN);
     lv_obj_set_style_bg_color(bg, (lv_color_t)LV_COLOR_MAKE(0x00, 0x00, 0x00), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(bg, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_text_align(bg, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
@@ -228,10 +239,16 @@ static void led_char_create(lv_obj_t *parent, int x, int y, int w, int h,
     lv_obj_set_style_arc_width(bg, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(bg, 0, LV_PART_MAIN);
     lv_label_set_long_mode(bg, LV_LABEL_LONG_CLIP);
+    lv_label_set_text(bg, "#");
 
+    /* Value label: shows the digit/decimal in WHITE, overlaid on top */
     lv_obj_t *val = lv_label_create(parent);
+    if (!val) {
+        *bg_out = bg;
+        return;
+    }
     lv_obj_set_style_text_font(val, FONT_LED, LV_PART_MAIN);
-    lv_obj_set_style_text_color(val, LED_BG_COLOR, LV_PART_MAIN);
+    lv_obj_set_style_text_color(val, LED_FG_COLOR, LV_PART_MAIN);
     lv_obj_set_style_text_align(val, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     lv_obj_set_pos(val, x, y);
     lv_obj_set_size(val, w, h);
@@ -241,6 +258,7 @@ static void led_char_create(lv_obj_t *parent, int x, int y, int w, int h,
     lv_obj_set_style_shadow_width(val, 0, LV_PART_MAIN);
     lv_obj_set_style_arc_width(val, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(val, 0, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(val, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_label_set_long_mode(val, LV_LABEL_LONG_CLIP);
 
     *bg_out = bg;
@@ -250,9 +268,9 @@ static void led_char_create(lv_obj_t *parent, int x, int y, int w, int h,
 static void led_field_create(lv_obj_t *parent, int x, int y, int w, int h, int digits,
                               lv_obj_t **bg_labels, lv_obj_t **val_labels)
 {
-    int char_w = (w - (digits - 1) * 2) / digits;
+    int char_w = (w - (digits - 1) * LED_FIELD_GAP) / digits;
     for (int i = 0; i < digits; i++) {
-        int cx = x + i * (char_w + 2);
+        int cx = x + i * (char_w + LED_FIELD_GAP);
         led_char_create(parent, cx, y, char_w, h, &bg_labels[i], &val_labels[i]);
     }
 }
@@ -276,6 +294,7 @@ static void led_field_set_value(lv_obj_t **bg_labels, lv_obj_t **val_labels,
     for (int i = 0; i < digits; i++) {
         int src_idx = i - (digits - total_chars);
         if (src_idx < 0 || src_idx >= total_chars) {
+            /* Empty position: bg shows dark green #, val shows nothing */
             if (bg_labels[i]) {
                 lv_label_set_text(bg_labels[i], "#");
                 lv_obj_set_style_text_color(bg_labels[i], LED_BG_COLOR, LV_PART_MAIN);
@@ -284,17 +303,19 @@ static void led_field_set_value(lv_obj_t **bg_labels, lv_obj_t **val_labels,
                 lv_label_set_text(val_labels[i], " ");
             }
         } else if (src_buf[src_idx] == '.') {
-            if (bg_labels[i]) {
-                lv_label_set_text(bg_labels[i], ".");
-                lv_obj_set_style_text_color(bg_labels[i], LED_FG_COLOR, LV_PART_MAIN);
-            }
-            if (val_labels[i]) {
-                lv_label_set_text(val_labels[i], " ");
-            }
-        } else {
+            /* Decimal point: bg shows dark green #, val shows white '.' */
             if (bg_labels[i]) {
                 lv_label_set_text(bg_labels[i], "#");
-                lv_obj_set_style_text_color(bg_labels[i], LED_FG_COLOR, LV_PART_MAIN);
+                lv_obj_set_style_text_color(bg_labels[i], LED_BG_COLOR, LV_PART_MAIN);
+            }
+            if (val_labels[i]) {
+                lv_label_set_text(val_labels[i], ".");
+            }
+        } else {
+            /* Digit: bg shows dark green #, val shows white digit */
+            if (bg_labels[i]) {
+                lv_label_set_text(bg_labels[i], "#");
+                lv_obj_set_style_text_color(bg_labels[i], LED_BG_COLOR, LV_PART_MAIN);
             }
             if (val_labels[i]) {
                 lv_label_set_text(val_labels[i], &src_buf[src_idx]);
@@ -346,11 +367,13 @@ void watchface_start(void)
 {
     theme_init(THEME_YELLOW);
     const theme_colors_t *colors = theme_get_colors();
+    printk("watchface_start: theme initialized\n");
 
     lv_obj_set_style_bg_color(lv_scr_act(), colors->bg, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(lv_scr_act(), LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_width(lv_scr_act(), 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(lv_scr_act(), 0, LV_PART_MAIN);
+    printk("watchface_start: screen bg set\n");
 
     root_page = lv_obj_create(lv_scr_act());
     lv_obj_set_size(root_page, SCREEN_W, SCREEN_H);
@@ -360,6 +383,7 @@ void watchface_start(void)
     lv_obj_set_style_pad_all(root_page, 0, LV_PART_MAIN);
     lv_obj_set_style_radius(root_page, 0, LV_PART_MAIN);
     lv_obj_center(root_page);
+    printk("watchface_start: root page created\n");
 
     /* Top: DAWN label + time | moon | DUSK label + time
      * Row 1 (y=8):  DAWN:[moon]:DUSK   （标签紧贴moon）
@@ -470,6 +494,7 @@ void watchface_start(void)
     lv_label_set_text(clock_lbl_digit_colon, ":");
     lv_label_set_text(clock_lbl_digit_m1, "0");
     lv_label_set_text(clock_lbl_digit_m2, "0");
+    printk("watchface_start: clock created\n");
 
     /* Left stress indicator — height proportional to stress level (0-100) */
     stress_bar = lv_obj_create(root_page);
@@ -482,6 +507,7 @@ void watchface_start(void)
     lv_obj_set_style_border_width(stress_bar, 0, LV_PART_MAIN);
     lv_obj_set_style_radius(stress_bar, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(stress_bar, 0, LV_PART_MAIN);
+    printk("watchface_start: stress bar created\n");
 
     /* Right body battery indicator — height proportional to body battery (0-100) */
     bodybatt_bar = lv_obj_create(root_page);
@@ -494,6 +520,7 @@ void watchface_start(void)
     lv_obj_set_style_border_width(bodybatt_bar, 0, LV_PART_MAIN);
     lv_obj_set_style_radius(bodybatt_bar, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(bodybatt_bar, 0, LV_PART_MAIN);
+    printk("watchface_start: body batt bar created\n");
 
     /* Date line + seconds — full width matching clock
      * Row 6: MON, 5 MAY 2025         32
@@ -526,26 +553,26 @@ void watchface_start(void)
     int field_top = CLOCK_Y + CLOCK_H + 22;
     int field_h = LED_DIGIT_H;
     int label_h = 10;
-    int field_gap = 3;   /* 字段间间距：3像素（适配屏幕宽度240px） */
-    int total_field_w = 3 * FIELD1_W + 2 * field_gap;
+    int field_gap = 10;  /* 字段间间距：10像素 */
+    int total_field_w = 3 * LABEL1_W + 2 * field_gap;
     int field_start_x = CENTER_X - total_field_w / 2;
 
     int field1_x = field_start_x;
-    int field2_x = field_start_x + FIELD1_W + field_gap;
-    int field3_x = field_start_x + 2 * (FIELD1_W + field_gap);
+    int field2_x = field_start_x + LABEL1_W + field_gap;
+    int field3_x = field_start_x + 2 * (LABEL1_W + field_gap);
 
     /* ========= Field 1: RECOVERY HRS ========= */
     field1_label = lv_label_create(root_page);
     lv_obj_set_style_text_font(field1_label, FONT_LABEL, LV_PART_MAIN);
     lv_obj_set_style_text_color(field1_label, (lv_color_t)LV_COLOR_MAKE(0x52, 0xaa, 0xac), LV_PART_MAIN);
-    lv_obj_set_style_text_align(field1_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+    lv_obj_set_style_text_align(field1_label, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(field1_label, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_outline_width(field1_label, 0, LV_PART_MAIN);
     lv_obj_set_style_shadow_width(field1_label, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(field1_label, 0, LV_PART_MAIN);
     lv_label_set_long_mode(field1_label, LV_LABEL_LONG_CLIP);
     lv_obj_set_pos(field1_label, field1_x, field_top);
-    lv_obj_set_width(field1_label, FIELD1_W);
+    lv_obj_set_width(field1_label, LABEL1_W);
 
     led_field_create(root_page, field1_x, field_top + label_h + 2, FIELD1_W, field_h, FIELD1_DIGITS, field1_bg_labels, field1_val_labels);
 
@@ -553,14 +580,14 @@ void watchface_start(void)
     field2_label = lv_label_create(root_page);
     lv_obj_set_style_text_font(field2_label, FONT_LABEL, LV_PART_MAIN);
     lv_obj_set_style_text_color(field2_label, (lv_color_t)LV_COLOR_MAKE(0x52, 0xaa, 0xac), LV_PART_MAIN);
-    lv_obj_set_style_text_align(field2_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+    lv_obj_set_style_text_align(field2_label, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(field2_label, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_outline_width(field2_label, 0, LV_PART_MAIN);
     lv_obj_set_style_shadow_width(field2_label, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(field2_label, 0, LV_PART_MAIN);
     lv_label_set_long_mode(field2_label, LV_LABEL_LONG_CLIP);
     lv_obj_set_pos(field2_label, field2_x, field_top);
-    lv_obj_set_width(field2_label, FIELD2_W);
+    lv_obj_set_width(field2_label, LABEL2_W);
 
     led_field_create(root_page, field2_x, field_top + label_h + 2, FIELD2_W, field_h, FIELD2_DIGITS, field2_bg_labels, field2_val_labels);
 
@@ -568,26 +595,32 @@ void watchface_start(void)
     field3_label = lv_label_create(root_page);
     lv_obj_set_style_text_font(field3_label, FONT_LABEL, LV_PART_MAIN);
     lv_obj_set_style_text_color(field3_label, (lv_color_t)LV_COLOR_MAKE(0x52, 0xaa, 0xac), LV_PART_MAIN);
-    lv_obj_set_style_text_align(field3_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+    lv_obj_set_style_text_align(field3_label, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(field3_label, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_outline_width(field3_label, 0, LV_PART_MAIN);
     lv_obj_set_style_shadow_width(field3_label, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(field3_label, 0, LV_PART_MAIN);
     lv_label_set_long_mode(field3_label, LV_LABEL_LONG_CLIP);
     lv_obj_set_pos(field3_label, field3_x, field_top);
-    lv_obj_set_width(field3_label, FIELD3_W);
+    lv_obj_set_width(field3_label, LABEL3_W);
 
     led_field_create(root_page, field3_x, field_top + label_h + 2, FIELD3_W, field_h, FIELD3_DIGITS, field3_bg_labels, field3_val_labels);
+    printk("watchface_start: fields created\n");
 
     /* Bottom: icon + 5-digit steps (LED font) + icon
      * Row 9:  ♥   0 8 5 7 3   🔥   */
     int bottom_y = field_top + label_h + 2 + field_h + 4;
+    printk("watchface_start: creating heart icon\n");
     icon_draw(root_page, ICON_HEART, 30, bottom_y + 2, colors->heart_rate);
+    printk("watchface_start: heart icon created\n");
 
     int bottom5_x = CENTER_X - BOTTOM5_W / 2;
+    printk("watchface_start: creating bottom5 field\n");
     led_field_create(root_page, bottom5_x, bottom_y, BOTTOM5_W, LED_DIGIT_H, BOTTOM5_DIGITS, bottom5_bg_labels, bottom5_val_labels);
+    printk("watchface_start: bottom5 field created\n");
 
     icon_draw(root_page, ICON_CALORIES, 200, bottom_y + 2, colors->accent);
+    printk("watchface_start: bottom icons created\n");
 
     /* Battery icon — dynamic with fill based on battery level
      * Row 10: centered at bottom, showing battery level 0-100% */
@@ -633,12 +666,17 @@ void watchface_start(void)
     lv_obj_set_style_border_width(battery_cap, 0, LV_PART_MAIN);
 
     watchface_update_time();
+    printk("watchface_start: time updated\n");
     watchface_update_date();
+    printk("watchface_start: date updated\n");
     watchface_update_weather();
+    printk("watchface_start: weather updated\n");
     watchface_update_sensors();
+    printk("watchface_start: sensors updated\n");
 
     time_timer = lv_timer_create(time_update_cb, 1000, NULL);
     sensor_timer = lv_timer_create(sensor_update_cb, 10000, NULL);
+    printk("watchface_start: timers created, done\n");
 }
 
 void watchface_stop(void)
@@ -650,6 +688,9 @@ void watchface_stop(void)
 
 void watchface_update_time(void)
 {
+    if (!clock_lbl_digit_h1 || !clock_lbl_digit_h2 || !clock_lbl_digit_m1 || 
+        !clock_lbl_digit_m2 || !clock_lbl_digit_colon) return;
+
     struct tm timeinfo;
     time_t now = time(NULL);
     localtime_r(&now, &timeinfo);
@@ -672,6 +713,9 @@ void watchface_update_time(void)
 
 void watchface_update_date(void)
 {
+    if (!date_label || !seconds_label || !dawn_label || !dusk_label || 
+        !dawn_time_label || !dusk_time_label || !moon_label) return;
+
     struct tm timeinfo;
     time_t now = time(NULL);
     localtime_r(&now, &timeinfo);
@@ -759,6 +803,9 @@ void watchface_update_battery(void)
 
 void watchface_update_sensors(void)
 {
+    if (!field1_label || !field2_label || !field3_label) return;
+    if (!stress_bar || !bodybatt_bar) return;
+
     lv_label_set_text(field1_label, "RECOVERY HRS:");
     led_field_set_value(field1_bg_labels, field1_val_labels, FIELD1_DIGITS, (float)sim_recovery + 0.0f, 1);
 

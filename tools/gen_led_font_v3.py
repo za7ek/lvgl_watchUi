@@ -51,32 +51,55 @@ def parse_fnt(fnt_path):
 
 
 def extract_bitmap_14x20(img, char_info):
-    """Extract character bitmap from PNG and pad to 14x20.
-    Direct pixel extraction - preserves the original pixel pattern exactly.
-    Returns a 2D array: 0=foreground (lit/dark pixel), 1=background (gap/light pixel)
+    """Extract 5x7 block pattern from original 14x20 PNG character,
+    then re-render as 1x1 blocks with 1px gaps (9x13 pixels).
+    Samples the center of each 2x2 source block to determine lit/unlit.
+    Returns a 2D array: 0=foreground (lit), 1=background (gap)
     """
     x, y, w, h = char_info['x'], char_info['y'], char_info['w'], char_info['h']
     xoff = char_info.get('xoff', 0)
     yoff = char_info.get('yoff', 0)
 
     img_gray = img.convert('L')
-
     raw = img_gray.crop((x, y, x + w, y + h))
     raw_pixels = list(raw.getdata())
 
-    bitmap = [[1] * CHAR_W for _ in range(CHAR_H)]
+    SRC_BLOCK = 2
+    SRC_GAP = 1
+    SRC_CHAR_W = BLOCK_COLS * SRC_BLOCK + (BLOCK_COLS - 1) * SRC_GAP  # 14
+    SRC_CHAR_H = BLOCK_ROWS * SRC_BLOCK + (BLOCK_ROWS - 1) * SRC_GAP  # 20
 
-    for row in range(h):
-        for col in range(w):
-            pixel_val = raw_pixels[row * w + col]
-            is_lit = 1 if pixel_val < 128 else 0
-            dest_x = xoff + col
-            dest_y = yoff + row
-            if 0 <= dest_x < CHAR_W and 0 <= dest_y < CHAR_H:
-                if is_lit:
-                    bitmap[dest_y][dest_x] = 0
-                else:
-                    bitmap[dest_y][dest_x] = 1
+    block_pattern = [[0] * BLOCK_COLS for _ in range(BLOCK_ROWS)]
+
+    for br in range(BLOCK_ROWS):
+        for bc in range(BLOCK_COLS):
+            src_x = xoff + bc * (SRC_BLOCK + SRC_GAP)
+            src_y = yoff + br * (SRC_BLOCK + SRC_GAP)
+            lit_count = 0
+            total = 0
+            for dy in range(SRC_BLOCK):
+                for dx in range(SRC_BLOCK):
+                    px = src_x + dx
+                    py = src_y + dy
+                    if 0 <= px < w and 0 <= py < h:
+                        pixel_val = raw_pixels[py * w + px]
+                        if pixel_val < 128:
+                            lit_count += 1
+                        total += 1
+            block_pattern[br][bc] = 1 if (total > 0 and lit_count > total // 2) else 0
+
+    bitmap = [[1] * CHAR_W for _ in range(CHAR_H)]
+    for br in range(BLOCK_ROWS):
+        for bc in range(BLOCK_COLS):
+            if block_pattern[br][bc]:
+                start_x = bc * (BLOCK_SIZE + BLOCK_GAP)
+                start_y = br * (BLOCK_SIZE + BLOCK_GAP)
+                for dy in range(BLOCK_SIZE):
+                    for dx in range(BLOCK_SIZE):
+                        px = start_x + dx
+                        py = start_y + dy
+                        if 0 <= px < CHAR_W and 0 <= py < CHAR_H:
+                            bitmap[py][px] = 0
 
     return bitmap
 
@@ -87,13 +110,13 @@ def create_space_bitmap():
 
 
 def create_dot_bitmap():
-    """Decimal point: 4 blocks at cols 1-2, rows 5-6 (0-indexed).
-    This creates a 2x2 block pattern in the bottom-right area.
+    """Decimal point: 4 blocks at cols 2-3, rows 5-6 (0-indexed).
+    This creates a 2x2 block pattern at the bottom-right area.
     """
     bitmap = [[1] * CHAR_W for _ in range(CHAR_H)]
 
     for block_row in [5, 6]:
-        for block_col in [1, 2]:
+        for block_col in [2, 3]:
             start_x = block_col * (BLOCK_SIZE + BLOCK_GAP)
             start_y = block_row * (BLOCK_SIZE + BLOCK_GAP)
             for dy in range(BLOCK_SIZE):
@@ -180,29 +203,29 @@ def main():
 
         if cid == 32:
             bitmap = create_space_bitmap()
-            xadv = 18
+            xadv = CHAR_W + 2
         elif cid == 35:
             bitmap = create_hash_bitmap()
-            xadv = 18
+            xadv = CHAR_W + 2
         elif cid == 46:
             bitmap = create_dot_bitmap()
-            xadv = 18
+            xadv = CHAR_W + 2
         elif cid == 58 and cid in chars:
             info = chars[cid]
             bitmap = extract_bitmap_14x20(img, info)
-            xadv = info['xadv']
+            xadv = CHAR_W + 2
         elif cid in chars:
             info = chars[cid]
             bitmap = extract_bitmap_14x20(img, info)
-            xadv = info['xadv']
+            xadv = CHAR_W + 2
         else:
             print(f"  WARNING: char {cid} ({name}) not found in FNT, creating empty")
             bitmap = create_space_bitmap()
-            xadv = 18
+            xadv = CHAR_W + 2
 
         data = bitmap_to_lvgl(bitmap)
 
-        ofs_x = xadv - CHAR_W  # right-align within cell (xadv=18, CHAR_W=14 → ofs_x=4)
+        ofs_x = 0  # left-align within cell (bitmap fills left side)
         glyph_dsc = {
             'bitmap_index': len(bitmap_data),
             'adv_w': xadv * 16,
@@ -237,7 +260,7 @@ def main():
         f.write(' * Auto-generated LVGL 9.x LED font\n')
         f.write(' * Source: Segment34.CN/resources/fonts/led.fnt + led.png\n')
         f.write(' * Direct pixel extraction from PNG (preserves original patterns)\n')
-        f.write(' * Each character is 5x7 LED blocks (14x20 pixels)\n')
+        f.write(f' * Each character is 5x7 LED blocks ({CHAR_W}x{CHAR_H} pixels, 1x1 blocks with 1px gaps)\n')
         f.write(' */\n\n')
 
         f.write('#include "lvgl.h"\n\n')
@@ -287,7 +310,7 @@ def main():
         f.write('const lv_font_t lv_font_led = {\n')
         f.write('    .get_glyph_dsc = lv_font_get_glyph_dsc_fmt_txt,\n')
         f.write('    .get_glyph_bitmap = lv_font_get_bitmap_fmt_txt,\n')
-        f.write('    .line_height = 20,\n')
+        f.write(f'    .line_height = {CHAR_H},\n')
         f.write('    .base_line = 0,\n')
         f.write('    .subpx = LV_FONT_SUBPX_NONE,\n')
         f.write('    .underline_position = 0,\n')
