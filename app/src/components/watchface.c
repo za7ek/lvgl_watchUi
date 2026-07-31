@@ -639,7 +639,9 @@ void watchface_start(void)
     lv_obj_set_style_pad_all(battery_container, 0, LV_PART_MAIN);
     
     battery_fill = lv_obj_create(battery_container);
-    lv_obj_set_height(battery_fill, battery_h - 4);
+    /* Fill height = content_h - 2*gap = (battery_h - 2*border) - 2*gap
+     * = (12 - 2) - 4 = 6, so 2px gaps on top AND bottom (vertically centered) */
+    lv_obj_set_height(battery_fill, battery_h - 6);
     lv_obj_set_width(battery_fill, 0);
     lv_obj_set_pos(battery_fill, 2, 2);
     lv_obj_set_style_bg_color(battery_fill, colors->battery, LV_PART_MAIN);
@@ -804,12 +806,8 @@ void watchface_update_battery(void)
         lv_obj_set_style_bg_color(battery_fill, (lv_color_t)LV_COLOR_MAKE(0xff, 0xff, 0xff), LV_PART_MAIN);
     }
 
-    /* 90-100%: no border; otherwise show gray border */
-    if (battery_level >= 90) {
-        lv_obj_set_style_border_width(battery_container, 0, LV_PART_MAIN);
-    } else {
-        lv_obj_set_style_border_width(battery_container, 1, LV_PART_MAIN);
-    }
+    /* Always show gray border (including 90-100%) */
+    lv_obj_set_style_border_width(battery_container, 1, LV_PART_MAIN);
 
     /* Percentage display mode: 0=hidden, 1=inside battery, 2=outside battery */
     char percent_str[4];
