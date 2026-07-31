@@ -103,6 +103,7 @@ def extract_char_bitmap(img, char_info, target_h, dark_bg=False):
 
 def bitmap_to_lvgl_1bpp(bitmap, width, height):
     """Convert bitmap (rows x cols) to LVGL 1bpp MSB-first format.
+    LVGL reads bits continuously (no per-row padding).
     bit=0 → foreground (render with text color)
     bit=1 → background (transparent)
     """
@@ -219,15 +220,15 @@ def main():
         xoff = info['xoff']
         yoff = info['yoff']
         
-        data = bitmap_to_lvgl_1bpp(bitmap, box_w, box_h)
-        
-        # LVGL positioning: y1 = pos->y + (line_height - base_line) - box_h - ofs_y
-        # With base_line=0: y1 = pos->y + line_height - box_h - ofs_y
-        # BMFont yoffset is distance from top of cell to glyph top (positive = below top)
-        # We want glyph top at pos->y + yoffset, so:
-        #   pos->y + line_height - box_h - ofs_y = pos->y + yoffset
-        #   ofs_y = line_height - box_h - yoffset
-        lvgl_ofs_y = target_h - box_h - yoff
+        # Special handling for space (char 32): zero-size, no bitmap
+        if cid == 32:
+            box_w = 0
+            box_h = 0
+            data = b''
+            lvgl_ofs_y = target_h
+        else:
+            data = bitmap_to_lvgl_1bpp(bitmap, box_w, box_h)
+            lvgl_ofs_y = target_h - box_h - yoff
         
         glyph_dsc = {
             'bitmap_index': len(bitmap_data),
@@ -243,12 +244,13 @@ def main():
         
         print(f"  Char '{name}' (id={cid}): {box_w}x{box_h}, {len(data)} bytes, adv_w={glyph_dsc['adv_w']}, ofs_x={xoff}, ofs_y={lvgl_ofs_y} (bm_yoffset={yoff})")
         
-        bitmap_preview = []
-        for r in range(box_h):
-            row_str = ''.join(['#' if bitmap[r][c] == 0 else '.' for c in range(box_w)])
-            bitmap_preview.append(row_str)
-        for r in bitmap_preview:
-            print(f"    {r}")
+        if box_w > 0 and box_h > 0:
+            bitmap_preview = []
+            for r in range(box_h):
+                row_str = ''.join(['#' if bitmap[r][c] == 0 else '.' for c in range(box_w)])
+                bitmap_preview.append(row_str)
+            for r in bitmap_preview:
+                print(f"    {r}")
     
     print(f"Total bitmap data size: {len(bitmap_data)} bytes")
     
@@ -256,13 +258,25 @@ def main():
         print("ERROR: No glyphs generated!")
         sys.exit(1)
     
-    # Build cmap entries (one range per glyph for simplicity)
+    # Prepend a reserved dummy entry at glyph_dsc[0]
+    # All real glyphs are shifted by +1
+    reserved_dsc = {
+        'bitmap_index': 0,
+        'adv_w': 0,
+        'box_w': 0,
+        'box_h': 0,
+        'ofs_x': 0,
+        'ofs_y': 0
+    }
+    glyph_dscs.insert(0, reserved_dsc)
+    
+    # Build cmap entries: glyph_id_start = i + 1 to account for reserved entry
     cmap_entries = []
     for i, cid in enumerate(actual_ids):
         cmap_entries.append({
             'range_start': cid,
             'range_length': 1,
-            'glyph_id_start': i
+            'glyph_id_start': i + 1
         })
     
     # Generate output file
@@ -290,8 +304,11 @@ def main():
         f.write('static const lv_font_fmt_txt_glyph_dsc_t glyph_dsc[] = {\n')
         for i, gd in enumerate(glyph_dscs):
             comma = ',' if i < len(glyph_dscs) - 1 else ''
-            cid = actual_ids[i]
-            f.write(f'    {{ {gd["bitmap_index"]:>5d}, {gd["adv_w"]:>4d}, {gd["box_w"]:>3d}, {gd["box_h"]:>3d}, {gd["ofs_x"]:>2d}, {gd["ofs_y"]:>2d} }}  /* 0x{cid:04X} */{comma}\n')
+            if i == 0:
+                f.write(f'    {{ {gd["bitmap_index"]:>5d}, {gd["adv_w"]:>4d}, {gd["box_w"]:>3d}, {gd["box_h"]:>3d}, {gd["ofs_x"]:>2d}, {gd["ofs_y"]:>2d} }}  /* reserved dummy */{comma}\n')
+            else:
+                cid = actual_ids[i - 1]
+                f.write(f'    {{ {gd["bitmap_index"]:>5d}, {gd["adv_w"]:>4d}, {gd["box_w"]:>3d}, {gd["box_h"]:>3d}, {gd["ofs_x"]:>2d}, {gd["ofs_y"]:>2d} }}  /* 0x{cid:04X} */{comma}\n')
         f.write('};\n\n')
         
         f.write('/*Collect the unicode lists and glyph_id offsets*/\n')
