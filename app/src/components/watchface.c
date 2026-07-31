@@ -141,8 +141,9 @@ static lv_obj_t *bottom5_val_labels[BOTTOM5_DIGITS];
 
 static lv_obj_t *battery_container = NULL;
 static lv_obj_t *battery_fill = NULL;
-static lv_obj_t *battery_label = NULL;
-static bool battery_show_percent = false;
+static lv_obj_t *battery_label = NULL;        /* 百分比标签（电池内部） */
+static lv_obj_t *battery_percent_label = NULL; /* 百分比标签（电池外部） */
+static int battery_display_mode = 0;           /* 0=不显示, 1=内部显示, 2=外部显示 */
 
 static lv_obj_t *stress_bar = NULL;
 static lv_obj_t *bodybatt_bar = NULL;
@@ -655,7 +656,17 @@ void watchface_start(void)
     lv_obj_set_size(battery_label, battery_w, battery_h);
     lv_obj_set_style_bg_opa(battery_label, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_add_flag(battery_label, LV_OBJ_FLAG_HIDDEN);
-    
+
+    /* Battery percentage label (outside, to the right of battery cap) */
+    battery_percent_label = lv_label_create(root_page);
+    lv_label_set_text(battery_percent_label, "");
+    lv_obj_set_style_text_font(battery_percent_label, &lv_font_montserrat_8, LV_PART_MAIN);
+    lv_obj_set_style_text_color(battery_percent_label, colors->data_val, LV_PART_MAIN);
+    lv_obj_set_style_text_align(battery_percent_label, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(battery_percent_label, 0, LV_PART_MAIN);
+    lv_obj_set_pos(battery_percent_label, CENTER_X + battery_w / 2 + 5, battery_y + 2);
+    lv_obj_add_flag(battery_percent_label, LV_OBJ_FLAG_HIDDEN);
+
     /* Battery cap */
     lv_obj_t *battery_cap = lv_obj_create(root_page);
     lv_obj_set_size(battery_cap, 3, 6);
@@ -773,16 +784,18 @@ void watchface_update_weather(void)
 void watchface_update_battery(void)
 {
     if (!battery_fill) return;
-    
+
     int battery_level = sim_battery;
     if (battery_level < 0) battery_level = 0;
     if (battery_level > 100) battery_level = 100;
-    
+
+    /* Fill width proportional to battery level (max 20px inside 24px container) */
     int fill_w = (battery_level * 20) / 100;
     if (fill_w < 1 && battery_level > 0) fill_w = 1;
-    
+
     lv_obj_set_width(battery_fill, fill_w);
-    
+
+    /* Color: red for 1-10%, green for 90-100%, white otherwise */
     if (battery_level <= 10) {
         lv_obj_set_style_bg_color(battery_fill, (lv_color_t)LV_COLOR_MAKE(0xff, 0x00, 0x00), LV_PART_MAIN);
     } else if (battery_level >= 90) {
@@ -790,14 +803,32 @@ void watchface_update_battery(void)
     } else {
         lv_obj_set_style_bg_color(battery_fill, (lv_color_t)LV_COLOR_MAKE(0xff, 0xff, 0xff), LV_PART_MAIN);
     }
-    
-    if (battery_show_percent) {
-        char percent_str[4];
-        snprintf(percent_str, sizeof(percent_str), "%d", battery_level);
+
+    /* 90-100%: no border; otherwise show gray border */
+    if (battery_level >= 90) {
+        lv_obj_set_style_border_width(battery_container, 0, LV_PART_MAIN);
+    } else {
+        lv_obj_set_style_border_width(battery_container, 1, LV_PART_MAIN);
+    }
+
+    /* Percentage display mode: 0=hidden, 1=inside battery, 2=outside battery */
+    char percent_str[4];
+    snprintf(percent_str, sizeof(percent_str), "%d", battery_level);
+
+    if (battery_display_mode == 1) {
+        /* Inside: show label inside battery container */
         lv_label_set_text(battery_label, percent_str);
         lv_obj_clear_flag(battery_label, LV_OBJ_FLAG_HIDDEN);
-    } else {
+        lv_obj_add_flag(battery_percent_label, LV_OBJ_FLAG_HIDDEN);
+    } else if (battery_display_mode == 2) {
+        /* Outside: show label to the right of battery */
+        lv_label_set_text(battery_percent_label, percent_str);
+        lv_obj_clear_flag(battery_percent_label, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(battery_label, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        /* Hidden */
+        lv_obj_add_flag(battery_label, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(battery_percent_label, LV_OBJ_FLAG_HIDDEN);
     }
 }
 
@@ -835,7 +866,8 @@ void watchface_update_sensors(void)
 
 void watchface_switch_battery_display(void)
 {
-    battery_show_percent = !battery_show_percent;
+    /* Cycle: 0=不显示 → 1=内部显示 → 2=外部显示 → 0 */
+    battery_display_mode = (battery_display_mode + 1) % 3;
     watchface_update_battery();
 }
 
