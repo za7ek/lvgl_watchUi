@@ -29,7 +29,7 @@ LOG_MODULE_REGISTER(watchface, LOG_LEVEL_INF);
 #define CLOCK_W 220
 #define CLOCK_H 80
 #define CLOCK_X 10
-#define CLOCK_Y 66
+#define CLOCK_Y 60
 
 /* 实体线字体（Montserrat系列）替代点阵LED字体
  * 第一行标签、字段标签：FONT_LABEL = montserrat_8（比时间行更小）
@@ -407,7 +407,7 @@ void watchface_start(void)
     lv_obj_set_style_outline_width(dawn_time_label, 0, LV_PART_MAIN);
     lv_obj_set_style_shadow_width(dawn_time_label, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(dawn_time_label, 0, LV_PART_MAIN);
-    lv_obj_set_pos(dawn_time_label, 64, 19);
+    lv_obj_set_pos(dawn_time_label, 64, 16);
     lv_obj_set_width(dawn_time_label, 40);
 
     moon_label = lv_label_create(root_page);
@@ -441,7 +441,7 @@ void watchface_start(void)
     lv_obj_set_style_outline_width(dusk_time_label, 0, LV_PART_MAIN);
     lv_obj_set_style_shadow_width(dusk_time_label, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(dusk_time_label, 0, LV_PART_MAIN);
-    lv_obj_set_pos(dusk_time_label, 136, 19);
+    lv_obj_set_pos(dusk_time_label, 136, 16);
     lv_obj_set_width(dusk_time_label, 40);
 
     /* Weather: temp line + description line
@@ -452,14 +452,14 @@ void watchface_start(void)
     lv_obj_set_style_text_color(temp_label, colors->text, LV_PART_MAIN);
     lv_obj_set_style_text_align(temp_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     lv_obj_set_width(temp_label, SCREEN_W);
-    lv_obj_set_pos(temp_label, 0, 32);
+    lv_obj_set_pos(temp_label, 0, 30);
 
     weather_label = lv_label_create(root_page);
     lv_obj_set_style_text_font(weather_label, FONT_MED, LV_PART_MAIN);
     lv_obj_set_style_text_color(weather_label, colors->weather, LV_PART_MAIN);
     lv_obj_set_style_text_align(weather_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     lv_obj_set_width(weather_label, SCREEN_W);
-    lv_obj_set_pos(weather_label, 0, 48);
+    lv_obj_set_pos(weather_label, 0, 45);
 
     /* Large clock — 5 equal columns, 3-layer rendering per column:
      *   Layer 0 (col bg):  solid clock_on (yellow)  →  segment base
@@ -533,7 +533,7 @@ void watchface_start(void)
     lv_obj_set_style_outline_width(date_label, 0, LV_PART_MAIN);
     lv_obj_set_style_shadow_width(date_label, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(date_label, 0, LV_PART_MAIN);
-    lv_obj_set_pos(date_label, CLOCK_X, CLOCK_Y + CLOCK_H + 6);
+    lv_obj_set_pos(date_label, CLOCK_X, CLOCK_Y + CLOCK_H + 4);
     lv_obj_set_width(date_label, CLOCK_W);
 
     seconds_label = lv_label_create(root_page);
@@ -544,13 +544,13 @@ void watchface_start(void)
     lv_obj_set_style_outline_width(seconds_label, 0, LV_PART_MAIN);
     lv_obj_set_style_shadow_width(seconds_label, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(seconds_label, 0, LV_PART_MAIN);
-    lv_obj_set_pos(seconds_label, CLOCK_X + CLOCK_W - 30, CLOCK_Y + CLOCK_H + 6);
+    lv_obj_set_pos(seconds_label, CLOCK_X + CLOCK_W - 30, CLOCK_Y + CLOCK_H + 4);
     lv_obj_set_width(seconds_label, 30);
 
     /* Three data fields: label on top (solid font), LED dot-matrix value below
      * Row 7: RECOVERY HRS:   LAST HR:   WEEK ACT MIN:   （标签 montserrat_8）
      * Row 8:     5.0           80           0             （数值 LED 点阵风格） */
-    int field_top = CLOCK_Y + CLOCK_H + 22;
+    int field_top = CLOCK_Y + CLOCK_H + 20;
     int field_h = LED_DIGIT_H;
     int label_h = 10;
     int field_gap = 10;  /* 字段间间距：10像素 */
@@ -574,7 +574,7 @@ void watchface_start(void)
     lv_obj_set_pos(field1_label, field1_x, field_top);
     lv_obj_set_width(field1_label, LABEL1_W);
 
-    led_field_create(root_page, field1_x, field_top + label_h + 2, FIELD1_W, field_h, FIELD1_DIGITS, field1_bg_labels, field1_val_labels);
+    led_field_create(root_page, field1_x, field_top + label_h + 3, FIELD1_W, field_h, FIELD1_DIGITS, field1_bg_labels, field1_val_labels);
 
     /* ========= Field 2: LAST HR ========= */
     field2_label = lv_label_create(root_page);
@@ -589,7 +589,7 @@ void watchface_start(void)
     lv_obj_set_pos(field2_label, field2_x, field_top);
     lv_obj_set_width(field2_label, LABEL2_W);
 
-    led_field_create(root_page, field2_x, field_top + label_h + 2, FIELD2_W, field_h, FIELD2_DIGITS, field2_bg_labels, field2_val_labels);
+    led_field_create(root_page, field2_x, field_top + label_h + 3, FIELD2_W, field_h, FIELD2_DIGITS, field2_bg_labels, field2_val_labels);
 
     /* ========= Field 3: WEEK ACT MIN ========= */
     field3_label = lv_label_create(root_page);
@@ -604,12 +604,12 @@ void watchface_start(void)
     lv_obj_set_pos(field3_label, field3_x, field_top);
     lv_obj_set_width(field3_label, LABEL3_W);
 
-    led_field_create(root_page, field3_x, field_top + label_h + 2, FIELD3_W, field_h, FIELD3_DIGITS, field3_bg_labels, field3_val_labels);
+    led_field_create(root_page, field3_x, field_top + label_h + 3, FIELD3_W, field_h, FIELD3_DIGITS, field3_bg_labels, field3_val_labels);
     printk("watchface_start: fields created\n");
 
     /* Bottom: icon + 5-digit steps (LED font) + icon
      * Row 9:  ♥   0 8 5 7 3   🔥   */
-    int bottom_y = field_top + label_h + 2 + field_h + 4;
+    int bottom_y = field_top + label_h + 3 + field_h + 5;
     printk("watchface_start: creating heart icon\n");
     icon_draw(root_page, ICON_HEART, 30, bottom_y + 2, colors->heart_rate);
     printk("watchface_start: heart icon created\n");
@@ -624,7 +624,7 @@ void watchface_start(void)
 
     /* Battery icon — dynamic with fill based on battery level
      * Row 10: centered at bottom, showing battery level 0-100% */
-    int battery_y = SCREEN_H - 14;
+    int battery_y = SCREEN_H - 17;
     int battery_w = 24;
     int battery_h = 12;
     
