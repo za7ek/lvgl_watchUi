@@ -44,7 +44,8 @@ static LV_ATTRIBUTE_LARGE_CONST const uint8_t glyph_bitmap[] = {
 
 /*Describe the properties of all glyphs*/
 static const lv_font_fmt_txt_glyph_dsc_t glyph_dsc[] = {
-    {     0,  256,  14,  20,  0,  0 }  /* 0x0020 */,
+    {     0,    0,   0,   0,  0,  0 }  /* id = 0 reserved */,
+    {     0,  256,   0,   0,  0,  0 }  /* 0x0020 */,
     {    35,  256,  14,  20,  0,  0 }  /* 0x0023 */,
     {    70,  256,  14,  20,  0,  0 }  /* 0x002E */,
     {   105,  256,  14,  20,  0,  0 }  /* 0x0030 */,
@@ -63,19 +64,19 @@ static const lv_font_fmt_txt_glyph_dsc_t glyph_dsc[] = {
 /*Collect the unicode lists and glyph_id offsets*/
 static const lv_font_fmt_txt_cmap_t cmaps[] = {
     {
-        .range_start = 32, .range_length = 1, .glyph_id_start = 0,
+        .range_start = 32, .range_length = 1, .glyph_id_start = 1,
         .unicode_list = NULL, .glyph_id_ofs_list = NULL, .list_length = 0, .type = LV_FONT_FMT_TXT_CMAP_FORMAT0_TINY
     },
     {
-        .range_start = 35, .range_length = 1, .glyph_id_start = 1,
+        .range_start = 35, .range_length = 1, .glyph_id_start = 2,
         .unicode_list = NULL, .glyph_id_ofs_list = NULL, .list_length = 0, .type = LV_FONT_FMT_TXT_CMAP_FORMAT0_TINY
     },
     {
-        .range_start = 46, .range_length = 1, .glyph_id_start = 2,
+        .range_start = 46, .range_length = 1, .glyph_id_start = 3,
         .unicode_list = NULL, .glyph_id_ofs_list = NULL, .list_length = 0, .type = LV_FONT_FMT_TXT_CMAP_FORMAT0_TINY
     },
     {
-        .range_start = 48, .range_length = 1, .glyph_id_start = 3,
+        .range_start = 48, .range_length = 1, .glyph_id_start = 4,
         .unicode_list = NULL, .glyph_id_ofs_list = NULL, .list_length = 0, .type = LV_FONT_FMT_TXT_CMAP_FORMAT0_TINY
     },
     {
