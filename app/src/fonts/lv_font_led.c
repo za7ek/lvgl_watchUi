@@ -80,43 +80,43 @@ static const lv_font_fmt_txt_cmap_t cmaps[] = {
         .unicode_list = NULL, .glyph_id_ofs_list = NULL, .list_length = 0, .type = LV_FONT_FMT_TXT_CMAP_FORMAT0_TINY
     },
     {
-        .range_start = 49, .range_length = 1, .glyph_id_start = 4,
+        .range_start = 49, .range_length = 1, .glyph_id_start = 5,
         .unicode_list = NULL, .glyph_id_ofs_list = NULL, .list_length = 0, .type = LV_FONT_FMT_TXT_CMAP_FORMAT0_TINY
     },
     {
-        .range_start = 50, .range_length = 1, .glyph_id_start = 5,
+        .range_start = 50, .range_length = 1, .glyph_id_start = 6,
         .unicode_list = NULL, .glyph_id_ofs_list = NULL, .list_length = 0, .type = LV_FONT_FMT_TXT_CMAP_FORMAT0_TINY
     },
     {
-        .range_start = 51, .range_length = 1, .glyph_id_start = 6,
+        .range_start = 51, .range_length = 1, .glyph_id_start = 7,
         .unicode_list = NULL, .glyph_id_ofs_list = NULL, .list_length = 0, .type = LV_FONT_FMT_TXT_CMAP_FORMAT0_TINY
     },
     {
-        .range_start = 52, .range_length = 1, .glyph_id_start = 7,
+        .range_start = 52, .range_length = 1, .glyph_id_start = 8,
         .unicode_list = NULL, .glyph_id_ofs_list = NULL, .list_length = 0, .type = LV_FONT_FMT_TXT_CMAP_FORMAT0_TINY
     },
     {
-        .range_start = 53, .range_length = 1, .glyph_id_start = 8,
+        .range_start = 53, .range_length = 1, .glyph_id_start = 9,
         .unicode_list = NULL, .glyph_id_ofs_list = NULL, .list_length = 0, .type = LV_FONT_FMT_TXT_CMAP_FORMAT0_TINY
     },
     {
-        .range_start = 54, .range_length = 1, .glyph_id_start = 9,
+        .range_start = 54, .range_length = 1, .glyph_id_start = 10,
         .unicode_list = NULL, .glyph_id_ofs_list = NULL, .list_length = 0, .type = LV_FONT_FMT_TXT_CMAP_FORMAT0_TINY
     },
     {
-        .range_start = 55, .range_length = 1, .glyph_id_start = 10,
+        .range_start = 55, .range_length = 1, .glyph_id_start = 11,
         .unicode_list = NULL, .glyph_id_ofs_list = NULL, .list_length = 0, .type = LV_FONT_FMT_TXT_CMAP_FORMAT0_TINY
     },
     {
-        .range_start = 56, .range_length = 1, .glyph_id_start = 11,
+        .range_start = 56, .range_length = 1, .glyph_id_start = 12,
         .unicode_list = NULL, .glyph_id_ofs_list = NULL, .list_length = 0, .type = LV_FONT_FMT_TXT_CMAP_FORMAT0_TINY
     },
     {
-        .range_start = 57, .range_length = 1, .glyph_id_start = 12,
+        .range_start = 57, .range_length = 1, .glyph_id_start = 13,
         .unicode_list = NULL, .glyph_id_ofs_list = NULL, .list_length = 0, .type = LV_FONT_FMT_TXT_CMAP_FORMAT0_TINY
     },
     {
-        .range_start = 58, .range_length = 1, .glyph_id_start = 13,
+        .range_start = 58, .range_length = 1, .glyph_id_start = 14,
         .unicode_list = NULL, .glyph_id_ofs_list = NULL, .list_length = 0, .type = LV_FONT_FMT_TXT_CMAP_FORMAT0_TINY
     }
 };

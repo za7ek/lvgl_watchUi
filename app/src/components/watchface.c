@@ -320,13 +320,18 @@ static void led_field_set_value(lv_obj_t **bg_labels, lv_obj_t **val_labels,
              *   bg # in WHITE → 35 white blocks (base layer)
              *   val digit in DARK GREEN → non-segments (opaque) covered dark green,
              *                              segments (transparent) show white from bg
-             *   Result: segments=white, non-segments=dark green */
+             *   Result: segments=white, non-segments=dark green
+             * NOTE: must pass a single NUL-terminated char, NOT &src_buf[src_idx],
+             * otherwise lv_label_set_text reads the whole remaining string and center-
+             * alignment + LV_LABEL_LONG_CLIP shows the MIDDLE char (e.g. "8698"→'6'/'9'),
+             * causing every field to display the wrong digits. */
+            char one_char[2] = { src_buf[src_idx], '\0' };
             if (bg_labels[i]) {
                 lv_label_set_text(bg_labels[i], "#");
                 lv_obj_set_style_text_color(bg_labels[i], LED_FG_COLOR, LV_PART_MAIN);
             }
             if (val_labels[i]) {
-                lv_label_set_text(val_labels[i], &src_buf[src_idx]);
+                lv_label_set_text(val_labels[i], one_char);
                 lv_obj_set_style_text_color(val_labels[i], LED_BG_COLOR, LV_PART_MAIN);
             }
         }
@@ -852,8 +857,8 @@ void watchface_update_sensors(void)
     lv_label_set_text(field3_label, "WEEK ACT MIN:");
     led_field_set_value(field3_bg_labels, field3_val_labels, FIELD3_DIGITS, (float)sim_week_min, 0);
 
-    LOG_INF("LED values: RECOVERY=%.1f LAST_HR=%d WEEK_MIN=%d STEPS=%d",
-            (double)sim_recovery, sim_last_hr, sim_week_min, sim_steps);
+    LOG_INF("LED values: RECOVERY=%d LAST_HR=%d WEEK_MIN=%d STEPS=%d",
+            sim_recovery, sim_last_hr, sim_week_min, sim_steps);
 
     led_field_set_value(bottom5_bg_labels, bottom5_val_labels, BOTTOM5_DIGITS, (float)sim_steps, 0);
 
