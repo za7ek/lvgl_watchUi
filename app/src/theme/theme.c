@@ -21,7 +21,7 @@ static const theme_colors_t themes[] = {
         .stress = LV_COLOR_MAKE(0xff, 0x66, 0xaa),
         .bodybatt = LV_COLOR_MAKE(0x88, 0xff, 0xff),
         .notif = LV_COLOR_MAKE(0xff, 0x88, 0xff),
-        .moon = LV_COLOR_MAKE(0xe8, 0xe8, 0xe8),
+        .moon = LV_COLOR_MAKE(0xdc, 0xe0, 0xe4),
         .outline = LV_COLOR_MAKE(0x44, 0x66, 0xaa),
     },
     {
@@ -41,7 +41,7 @@ static const theme_colors_t themes[] = {
         .stress = LV_COLOR_MAKE(0xff, 0x66, 0xaa),
         .bodybatt = LV_COLOR_MAKE(0x88, 0xff, 0xff),
         .notif = LV_COLOR_MAKE(0xff, 0x88, 0xff),
-        .moon = LV_COLOR_MAKE(0xe8, 0xe8, 0xe8),
+        .moon = LV_COLOR_MAKE(0xdc, 0xe0, 0xe4),
         .outline = LV_COLOR_MAKE(0x44, 0x66, 0xaa),
     },
     {
@@ -61,7 +61,7 @@ static const theme_colors_t themes[] = {
         .stress = LV_COLOR_MAKE(0xff, 0x66, 0xaa),
         .bodybatt = LV_COLOR_MAKE(0x88, 0xff, 0xff),
         .notif = LV_COLOR_MAKE(0xff, 0x88, 0xff),
-        .moon = LV_COLOR_MAKE(0xe8, 0xe8, 0xe8),
+        .moon = LV_COLOR_MAKE(0xdc, 0xe0, 0xe4),
         .outline = LV_COLOR_MAKE(0x44, 0x66, 0xaa),
     },
     {
@@ -81,7 +81,7 @@ static const theme_colors_t themes[] = {
         .stress = LV_COLOR_MAKE(0xff, 0x66, 0xaa),
         .bodybatt = LV_COLOR_MAKE(0x88, 0xff, 0xff),
         .notif = LV_COLOR_MAKE(0xff, 0x88, 0xff),
-        .moon = LV_COLOR_MAKE(0xe8, 0xe8, 0xe8),
+        .moon = LV_COLOR_MAKE(0xdc, 0xe0, 0xe4),
         .outline = LV_COLOR_MAKE(0x44, 0x66, 0xaa),
     },
     {
@@ -101,7 +101,7 @@ static const theme_colors_t themes[] = {
         .stress = LV_COLOR_MAKE(0xff, 0x66, 0xaa),
         .bodybatt = LV_COLOR_MAKE(0x88, 0xff, 0xff),
         .notif = LV_COLOR_MAKE(0xff, 0x88, 0xff),
-        .moon = LV_COLOR_MAKE(0xe8, 0xe8, 0xe8),
+        .moon = LV_COLOR_MAKE(0xdc, 0xe0, 0xe4),
         .outline = LV_COLOR_MAKE(0x44, 0x66, 0xaa),
     },
     {
@@ -121,7 +121,7 @@ static const theme_colors_t themes[] = {
         .stress = LV_COLOR_MAKE(0xff, 0x88, 0xcc),
         .bodybatt = LV_COLOR_MAKE(0x88, 0xff, 0xff),
         .notif = LV_COLOR_MAKE(0xff, 0x88, 0xff),
-        .moon = LV_COLOR_MAKE(0xe8, 0xe8, 0xe8),
+        .moon = LV_COLOR_MAKE(0xdc, 0xe0, 0xe4),
         .outline = LV_COLOR_MAKE(0xaa, 0x44, 0x66),
     },
     {
@@ -141,7 +141,7 @@ static const theme_colors_t themes[] = {
         .stress = LV_COLOR_MAKE(0xff, 0x66, 0xaa),
         .bodybatt = LV_COLOR_MAKE(0x88, 0xff, 0xff),
         .notif = LV_COLOR_MAKE(0xff, 0x88, 0xff),
-        .moon = LV_COLOR_MAKE(0xe8, 0xe8, 0xe8),
+        .moon = LV_COLOR_MAKE(0xdc, 0xe0, 0xe4),
         .outline = LV_COLOR_MAKE(0x66, 0x44, 0xaa),
     },
     {
@@ -161,7 +161,7 @@ static const theme_colors_t themes[] = {
         .stress = LV_COLOR_MAKE(0xff, 0x66, 0xaa),
         .bodybatt = LV_COLOR_MAKE(0x88, 0xff, 0xff),
         .notif = LV_COLOR_MAKE(0xff, 0x88, 0xff),
-        .moon = LV_COLOR_MAKE(0xe8, 0xe8, 0xe8),
+        .moon = LV_COLOR_MAKE(0xdc, 0xe0, 0xe4),
         .outline = LV_COLOR_MAKE(0x44, 0xaa, 0xaa),
     },
 };
