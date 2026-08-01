@@ -445,7 +445,7 @@ void watchface_start(void)
     lv_obj_set_style_outline_width(moon_label, 0, LV_PART_MAIN);
     lv_obj_set_style_shadow_width(moon_label, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(moon_label, 0, LV_PART_MAIN);
-    lv_obj_set_pos(moon_label, CENTER_X - 10, 13);
+    lv_obj_set_pos(moon_label, CENTER_X - 10, 7);
     lv_obj_set_width(moon_label, 20);
     lv_label_set_long_mode(moon_label, LV_LABEL_LONG_CLIP);   /* 强制单行不换行 */
 
@@ -778,7 +778,16 @@ void watchface_update_date(void)
     snprintf(sec_str, sizeof(sec_str), "%02d", timeinfo.tm_sec);
     lv_label_set_text(seconds_label, sec_str);
 
-    int moon_phase = get_moon_phase(timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday);
+    /* [DEBUG] 每 10s 循环展示月相图片 0-7，用于调试 */
+    static int dbg_moon_phase = 0;
+    static int dbg_tick = 0;
+    dbg_tick++;
+    if (dbg_tick >= 10) {
+        dbg_tick = 0;
+        dbg_moon_phase = (dbg_moon_phase + 1) % 8;
+    }
+    int moon_phase = dbg_moon_phase;
+    /* [DEBUG END] 正式版恢复为：get_moon_phase(timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday); */
 
     char dawn_str[24];
     char dusk_str[24];
@@ -803,7 +812,7 @@ void watchface_update_date(void)
     } else {
         lv_obj_set_style_text_font(moon_label, FONT_MOON_IMAGE, LV_PART_MAIN);
         lv_obj_set_width(moon_label, 20);
-        lv_obj_set_pos(moon_label, CENTER_X - 10, 13);
+        lv_obj_set_pos(moon_label, CENTER_X - 10, 7);
         char moon_char[2] = { '0' + moon_phase, '\0' };
         lv_label_set_text(moon_label, moon_char);
     }
