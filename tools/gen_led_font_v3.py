@@ -73,20 +73,26 @@ def extract_bitmap_14x20(img, char_info):
 
     for br in range(BLOCK_ROWS):
         for bc in range(BLOCK_COLS):
-            src_x = xoff + bc * (SRC_BLOCK + SRC_GAP)
-            src_y = yoff + br * (SRC_BLOCK + SRC_GAP)
+            # Map a render-grid block (cols [bc*3, bc*3+1]) back into the
+            # cropped glyph box: raw_col = render_col - xoff. The glyph image
+            # is placed at xoff within the cell, so subtracting xoff recovers
+            # the source pixel. Blocks fully outside the narrow glyph (tot==0)
+            # are background (non-segment), NOT lit segments.
             lit_count = 0
             total = 0
             for dy in range(SRC_BLOCK):
                 for dx in range(SRC_BLOCK):
-                    px = src_x + dx
-                    py = src_y + dy
+                    px = (bc * (SRC_BLOCK + SRC_GAP) + dx) - xoff
+                    py = (br * (SRC_BLOCK + SRC_GAP) + dy) - yoff
                     if 0 <= px < w and 0 <= py < h:
                         pixel_val = raw_pixels[py * w + px]
                         if pixel_val < 128:
                             lit_count += 1
                         total += 1
-            block_pattern[br][bc] = 1 if (total > 0 and lit_count > total // 2) else 0
+            # block_pattern=1 => non-segment (dark, drawn opaque); 0 => segment (lit, transparent).
+            # OOB (tot==0) is non-segment so narrow glyphs (e.g. '1' w=8/xoff=3, ':' w=2/xoff=6)
+            # get empty side columns instead of falsely-lit ones.
+            block_pattern[br][bc] = 1 if (total == 0 or lit_count > total // 2) else 0
 
     bitmap = [[1] * CHAR_W for _ in range(CHAR_H)]
     for br in range(BLOCK_ROWS):
