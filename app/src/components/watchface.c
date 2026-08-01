@@ -14,6 +14,7 @@
 #include "lv_font_led.h"
 #include "lv_font_led_small.h"
 #include "lv_font_xsmol.h"
+#include "lv_font_moon.h"
 #include <lvgl.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
@@ -40,6 +41,7 @@ LOG_MODULE_REGISTER(watchface, LOG_LEVEL_INF);
 #define FONT_DATA       &lv_font_montserrat_12
 #define FONT_TIME_SMALL &lv_font_montserrat_10
 #define FONT_MOON       &lv_font_montserrat_8
+#define FONT_MOON_IMAGE &lv_font_moon   /* 月相图片字体，20×20px，8 个月相（'0'-'7'） */
 #define FONT_MED        &lv_font_montserrat_12
 #define FONT_BIG        &lv_font_cjk_16
 #define FONT_LED        &lv_font_led   /* 用于字段数值行 + 倒数第二行steps（LED点阵风格） */
@@ -144,6 +146,7 @@ static lv_obj_t *battery_fill = NULL;
 static lv_obj_t *battery_label = NULL;        /* 百分比标签（电池内部） */
 static lv_obj_t *battery_percent_label = NULL; /* 百分比标签（电池外部） */
 static int battery_display_mode = 0;           /* 0=不显示, 1=内部显示, 2=外部显示 */
+static int moon_display_mode = 1;              /* 0=显示文字, 1=显示图片（默认图片） */
 
 static lv_obj_t *stress_bar = NULL;
 static lv_obj_t *bodybatt_bar = NULL;
@@ -340,11 +343,18 @@ static void led_field_set_value(lv_obj_t **bg_labels, lv_obj_t **val_labels,
 
 static const char *get_moon_string(int phase)
 {
+    /* 8 阶段映射到 4 个文字标签（每 2 个阶段归一组） */
     static const locale_str_id_t moon_ids[] = {
-        LOCALE_STR_MOON_NEW, LOCALE_STR_MOON_FIRST_Q,
-        LOCALE_STR_MOON_FULL, LOCALE_STR_MOON_THIRD_Q
+        LOCALE_STR_MOON_NEW,       /* phase 0: 新月 */
+        LOCALE_STR_MOON_NEW,       /* phase 1: 蛾眉月 */
+        LOCALE_STR_MOON_FIRST_Q,   /* phase 2: 上弦月 */
+        LOCALE_STR_MOON_FIRST_Q,   /* phase 3: 盈凸月 */
+        LOCALE_STR_MOON_FULL,      /* phase 4: 满月 */
+        LOCALE_STR_MOON_FULL,      /* phase 5: 亏凸月 */
+        LOCALE_STR_MOON_THIRD_Q,  /* phase 6: 下弦月 */
+        LOCALE_STR_MOON_THIRD_Q,  /* phase 7: 残月 */
     };
-    if (phase >= 0 && phase < 4) {
+    if (phase >= 0 && phase < 8) {
         return locale_get_string(moon_ids[phase]);
     }
     return "";
@@ -360,7 +370,7 @@ static int get_moon_phase(int year, int month, int day)
     r -= (year < 2000) ? 4 : 8;
     r = r % 30;
     if (r < 0) r += 30;
-    return (r * 4) / 30;
+    return (r * 8) / 30;
 }
 
 static void time_update_cb(lv_timer_t *timer)
@@ -425,15 +435,18 @@ void watchface_start(void)
     lv_obj_set_width(dawn_time_label, 40);
 
     moon_label = lv_label_create(root_page);
-    lv_obj_set_style_text_font(moon_label, FONT_MOON, LV_PART_MAIN);  /* 月相用更小的montserrat 8 */
+    /* 默认图片模式：20×20 月相图。参考 Segment34.CN：
+     *   dc.setColor(themeColors[moon], COLOR_TRANSPARENT) → 前景=moon色，背景=透明
+     * 月相图片字形中亮像素(月亮)用 text_color 绘制，暗像素透明透出表盘深色背景。 */
+    lv_obj_set_style_text_font(moon_label, FONT_MOON_IMAGE, LV_PART_MAIN);
     lv_obj_set_style_text_color(moon_label, colors->moon, LV_PART_MAIN);
     lv_obj_set_style_text_align(moon_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(moon_label, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_outline_width(moon_label, 0, LV_PART_MAIN);
     lv_obj_set_style_shadow_width(moon_label, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(moon_label, 0, LV_PART_MAIN);
-    lv_obj_set_pos(moon_label, CENTER_X - 16, 13);
-    lv_obj_set_width(moon_label, 32);
+    lv_obj_set_pos(moon_label, CENTER_X - 10, 13);
+    lv_obj_set_width(moon_label, 20);
     lv_label_set_long_mode(moon_label, LV_LABEL_LONG_CLIP);   /* 强制单行不换行 */
 
     dusk_label = lv_label_create(root_page);
@@ -781,7 +794,19 @@ void watchface_update_date(void)
     lv_label_set_text(dawn_time_label, dawn_time_str);
     lv_label_set_text(dusk_time_label, dusk_time_str);
 
-    lv_label_set_text(moon_label, get_moon_string(moon_phase));
+    /* 月相显示：0=文字，1=图片（默认）。参考 Segment34.CN moonPhase() 返回 "0"-"7" */
+    if (moon_display_mode == 0) {
+        lv_obj_set_style_text_font(moon_label, FONT_MOON, LV_PART_MAIN);
+        lv_obj_set_width(moon_label, 32);
+        lv_obj_set_pos(moon_label, CENTER_X - 16, 13);
+        lv_label_set_text(moon_label, get_moon_string(moon_phase));
+    } else {
+        lv_obj_set_style_text_font(moon_label, FONT_MOON_IMAGE, LV_PART_MAIN);
+        lv_obj_set_width(moon_label, 20);
+        lv_obj_set_pos(moon_label, CENTER_X - 10, 13);
+        char moon_char[2] = { '0' + moon_phase, '\0' };
+        lv_label_set_text(moon_label, moon_char);
+    }
 }
 
 void watchface_update_weather(void)
@@ -883,6 +908,13 @@ void watchface_switch_battery_display(void)
     /* Cycle: 0=不显示 → 1=内部显示 → 2=外部显示 → 0 */
     battery_display_mode = (battery_display_mode + 1) % 3;
     watchface_update_battery();
+}
+
+void watchface_switch_moon_display(void)
+{
+    /* Cycle: 0=文字 → 1=图片 → 0 */
+    moon_display_mode = (moon_display_mode + 1) % 2;
+    watchface_update_date();
 }
 
 void watchface_switch_language(void)

@@ -17,6 +17,7 @@ void watchface_update_sensors(void);
 void watchface_switch_language(void);
 void watchface_switch_theme(void);
 void watchface_switch_battery_display(void);
+void watchface_switch_moon_display(void);
 
 #ifdef __cplusplus
 }
