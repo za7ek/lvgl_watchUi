@@ -778,16 +778,7 @@ void watchface_update_date(void)
     snprintf(sec_str, sizeof(sec_str), "%02d", timeinfo.tm_sec);
     lv_label_set_text(seconds_label, sec_str);
 
-    /* [DEBUG] 每 10s 循环展示月相图片 0-7，用于调试 */
-    static int dbg_moon_phase = 0;
-    static int dbg_tick = 0;
-    dbg_tick++;
-    if (dbg_tick >= 10) {
-        dbg_tick = 0;
-        dbg_moon_phase = (dbg_moon_phase + 1) % 8;
-    }
-    int moon_phase = dbg_moon_phase;
-    /* [DEBUG END] 正式版恢复为：get_moon_phase(timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday); */
+    int moon_phase = get_moon_phase(timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday);
 
     char dawn_str[24];
     char dusk_str[24];
