@@ -2,10 +2,10 @@
 import os
 from PIL import Image, ImageDraw, ImageFont
 
-TTF_PATH = r"C:\Windows\Fonts\simhei.ttf"
-FONT_SIZE = 16
+TTF_PATH = "/usr/share/fonts/win11/simsun.ttc"
+FONT_SIZE = 10
 BPP = 4
-OUT_PATH = r"\\wsl$\Ubuntu\home\zheng_fang\zephyr-project\lgvl_watchUi\app\src\fonts\lv_font_cjk.c"
+OUT_PATH = "/home/zheng_fang/zephyr-project/lgvl_watchUi/app/src/fonts/lv_font_cjk.c"
 ASCII_START = 0x20
 ASCII_END = 0x7E
 ASCII_COUNT = ASCII_END - ASCII_START + 1
@@ -23,9 +23,10 @@ CJK_STRINGS = [
     u"初廿",
     u"闰",
     u"出落新上弦满下卡路里",
+    u"恢复小时周活动分楼层",
 ]
-FONT_NAME = "lv_font_cjk_16"
-LINE_HEIGHT = 18
+FONT_NAME = "lv_font_cjk"
+LINE_HEIGHT = 14
 BASE_LINE = 2
 
 def build_char_lists():
@@ -71,11 +72,6 @@ def render_glyph(font, ch):
                 data[byte_idx] |= nib
     return {"box_w": box_w, "box_h": box_h, "ofs_x": ofs_x, "ofs_y": ofs_y, "adv_w": adv_w, "data": bytes(data)}
 
-def fmt_hex_array(values, fmt, per_line=12):
-    rows = []
-    for i in range(0, len(values), per_line):
-        rows.append("    " + ", ".join(fmt % v for v in values[i:i+per_line]) + ",")
-    return "\n".join(rows)
 def main():
     ascii_chars, cjk_chars = build_char_lists()
     font = ImageFont.truetype(TTF_PATH, FONT_SIZE)
@@ -102,8 +98,7 @@ def main():
     cjk_codepoints = [ord(ch) for ch in cjk_chars]
     cjk_min = min(cjk_codepoints)
     cjk_max = max(cjk_codepoints)
-    cjk_range_length = cjk_max - cjk_min + 1
-    unicode_list = [cp - cjk_min for cp in cjk_codepoints]
+    cmap_num = 1 + len(cjk_chars)  # 1 ASCII block + 1 per CJK char
     L = []
     L.append('#include "lv_font_cjk.h"')
     L.append('')
@@ -122,31 +117,23 @@ def main():
     L.extend(glyph_dsc_lines)
     L.append('};')
     L.append('')
-    L.append('static const uint16_t %s_unicode_list_0[] = {' % FONT_NAME)
-    for i in range(0, len(unicode_list), 12):
-        chunk = unicode_list[i:i+12]
-        L.append('    ' + ', '.join('0x%04x' % v for v in chunk) + ',')
-    L.append('};')
     L.append('')
+    # CJK cmap: 1 FORMAT0_TINY block for ASCII + 1 FORMAT0_TINY per CJK char.
+    # This matches gen_font.py's approach (proven to work with this LVGL version).
+    # SPARSE_TINY was used before but caused all CJK chars to render as boxes.
     L.append('static const lv_font_fmt_txt_cmap_t %s_cmap[] = {' % FONT_NAME)
     L.append('    {')
-    L.append('        .range_start = 0x%02x,' % ASCII_START)
-    L.append('        .range_length = %d,' % ASCII_COUNT)
-    L.append('        .glyph_id_start = 1,')
-    L.append('        .unicode_list = NULL,')
-    L.append('        .glyph_id_ofs_list = NULL,')
-    L.append('        .list_length = %d,' % ASCII_COUNT)
+    L.append('        .range_start = 0x%02x, .range_length = %d, .glyph_id_start = 1,' % (ASCII_START, ASCII_COUNT))
+    L.append('        .unicode_list = NULL, .glyph_id_ofs_list = NULL, .list_length = %d,' % ASCII_COUNT)
     L.append('        .type = LV_FONT_FMT_TXT_CMAP_FORMAT0_TINY,')
     L.append('    },')
-    L.append('    {')
-    L.append('        .range_start = 0x%04x,' % cjk_min)
-    L.append('        .range_length = %d,' % cjk_range_length)
-    L.append('        .glyph_id_start = %d,' % cjk_start)
-    L.append('        .unicode_list = %s_unicode_list_0,' % FONT_NAME)
-    L.append('        .glyph_id_ofs_list = NULL,')
-    L.append('        .list_length = %d,' % len(unicode_list))
-    L.append('        .type = LV_FONT_FMT_TXT_CMAP_SPARSE_TINY,')
-    L.append('    },')
+    for i, cp in enumerate(cjk_codepoints):
+        comma = ',' if i < len(cjk_codepoints) - 1 else ''
+        L.append('    {')
+        L.append('        .range_start = 0x%04x, .range_length = 1, .glyph_id_start = %d,' % (cp, cjk_start + i))
+        L.append('        .unicode_list = NULL, .glyph_id_ofs_list = NULL, .list_length = 0,')
+        L.append('        .type = LV_FONT_FMT_TXT_CMAP_FORMAT0_TINY,')
+        L.append('    }%s' % comma)
     L.append('};')
     L.append('')
     L.append('static const lv_font_fmt_txt_dsc_t %s_fmt_dsc = {' % FONT_NAME)
@@ -155,7 +142,7 @@ def main():
     L.append('    .cmaps = %s_cmap,' % FONT_NAME)
     L.append('    .kern_dsc = NULL,')
     L.append('    .kern_scale = 0,')
-    L.append('    .cmap_num = 2,')
+    L.append('    .cmap_num = %d,' % cmap_num)
     L.append('    .bpp = %d,' % BPP)
     L.append('    .kern_classes = 0,')
     L.append('    .bitmap_format = 0,')
@@ -181,6 +168,7 @@ def main():
     print('  Bitmap size: %d bytes' % len(bitmap))
     print('  ASCII: 0x%02X-0x%02X -> glyph IDs 1-%d' % (ASCII_START, ASCII_END, ASCII_COUNT))
     print('  CJK: %d chars, range 0x%04X-0x%04X -> glyph IDs %d-%d' % (len(cjk_chars), cjk_min, cjk_max, cjk_start, cjk_start + len(cjk_chars) - 1))
+    print('  cmap_num: %d (1 ASCII + %d CJK individual)' % (cmap_num, len(cjk_chars)))
     print('  line_height=%d, base_line=%d (ascent=%d, descent=%d)' % (line_height, base_line, ascent, descent))
 
 if __name__ == '__main__':

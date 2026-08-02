@@ -12,7 +12,7 @@ typedef struct {
     char year_name[20];
     char month_name[16];
     char day_name[8];
-    char jieqi[8];
+    char jieqi[16];
 } lunar_date_t;
 
 void lunar_calendar_convert(uint16_t solar_year, uint8_t solar_month, uint8_t solar_day, lunar_date_t *lunar);

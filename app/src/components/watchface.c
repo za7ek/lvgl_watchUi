@@ -43,7 +43,7 @@ LOG_MODULE_REGISTER(watchface, LOG_LEVEL_INF);
 #define FONT_MOON       &lv_font_montserrat_8
 #define FONT_MOON_IMAGE &lv_font_moon   /* 月相图片字体，20×20px，8 个月相（'0'-'7'） */
 #define FONT_MED        &lv_font_montserrat_12
-#define FONT_BIG        &lv_font_cjk_16
+#define FONT_CJK        &lv_font_cjk    /* CJK 中文字体，10px，4bpp，用于日期行/天气/农历 */
 #define FONT_LED        &lv_font_led   /* 用于字段数值行 + 倒数第二行steps（LED点阵风格） */
 
 #define LED_DIGIT_W 16    /* adv_w=16px (14px char + 2px gap) */
@@ -759,19 +759,29 @@ void watchface_update_date(void)
     time_t now = time(NULL);
     localtime_r(&now, &timeinfo);
 
-    const char *weekday_str;
-    if (timeinfo.tm_wday == 0) {
-        weekday_str = locale_get_string(LOCALE_STR_SUNDAY);
-    } else {
-        weekday_str = locale_get_string(LOCALE_STR_MONDAY + timeinfo.tm_wday - 1);
-    }
-
+    /* 日期行：ZH 用 "周X yyyy-MM-dd"，EN 用 "MON, 5 MAY 2025" */
     char date_str[48];
-    snprintf(date_str, sizeof(date_str), "%s, %d %s %d",
-             weekday_str, timeinfo.tm_mday,
-             locale_get_string(LOCALE_STR_JANUARY + timeinfo.tm_mon),
-             timeinfo.tm_year + 1900);
+    if (current_lang == LANG_ZH) {
+        static const char *zhou[] = {"周日", "周一", "周二", "周三", "周四", "周五", "周六"};
+        snprintf(date_str, sizeof(date_str), "%s %04d-%02d-%02d",
+                 zhou[timeinfo.tm_wday],
+                 timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday);
+        lv_obj_set_style_text_font(date_label, FONT_CJK, LV_PART_MAIN);
+    } else {
+        const char *weekday_str;
+        if (timeinfo.tm_wday == 0) {
+            weekday_str = locale_get_string(LOCALE_STR_SUNDAY);
+        } else {
+            weekday_str = locale_get_string(LOCALE_STR_MONDAY + timeinfo.tm_wday - 1);
+        }
+        snprintf(date_str, sizeof(date_str), "%s, %d %s %d",
+                 weekday_str, timeinfo.tm_mday,
+                 locale_get_string(LOCALE_STR_JANUARY + timeinfo.tm_mon),
+                 timeinfo.tm_year + 1900);
+        lv_obj_set_style_text_font(date_label, FONT_DATA, LV_PART_MAIN);
+    }
     lv_label_set_text(date_label, date_str);
+    LOG_INF("[DATE] %s (wday=%d)", date_str, timeinfo.tm_wday);
 
     /* seconds_label 显示当前时间的秒（0-59），每秒更新 */
     char sec_str[8];
@@ -780,12 +790,9 @@ void watchface_update_date(void)
 
     int moon_phase = get_moon_phase(timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday);
 
-    char dawn_str[24];
-    char dusk_str[24];
-    snprintf(dawn_str, sizeof(dawn_str), "%s:", locale_get_string(LOCALE_STR_SUNRISE));
-    snprintf(dusk_str, sizeof(dusk_str), "%s:", locale_get_string(LOCALE_STR_SUNSET));
-    lv_label_set_text(dawn_label, dawn_str);
-    lv_label_set_text(dusk_label, dusk_str);
+    /* DAWN/DUSK 始终英文 */
+    lv_label_set_text(dawn_label, "DAWN:");
+    lv_label_set_text(dusk_label, "DUSK:");
 
     char dawn_time_str[16];
     char dusk_time_str[16];
@@ -813,12 +820,46 @@ void watchface_update_weather(void)
 {
     if (!temp_label || !weather_label) return;
 
-    char temp_str[32];
-    snprintf(temp_str, sizeof(temp_str), "%dF, +%d, %d%%",
-             sim_temp, sim_temp_hi - sim_temp, sim_humidity);
-    lv_label_set_text(temp_label, temp_str);
+    if (current_lang == LANG_ZH) {
+        /* 第三行：天气描述 + 温度 */
+        char temp_str[32];
+        snprintf(temp_str, sizeof(temp_str), "%s %dF",
+                 locale_get_string(LOCALE_STR_PARTLY_CLOUDY), sim_temp);
+        lv_obj_set_style_text_font(temp_label, FONT_CJK, LV_PART_MAIN);
+        lv_label_set_text(temp_label, temp_str);
+        LOG_INF("[WEATHER] %s (temp=%dF)", temp_str, sim_temp);
 
-    lv_label_set_text(weather_label, "PARTLY CLOUDY");
+        /* 第四行：农历日期 + 节气 */
+        struct tm timeinfo;
+        time_t now = time(NULL);
+        localtime_r(&now, &timeinfo);
+        lunar_date_t lunar;
+        lunar_calendar_convert(timeinfo.tm_year + 1900, timeinfo.tm_mon + 1,
+                               timeinfo.tm_mday, &lunar);
+        char lunar_str[48];
+        if (lunar.jieqi[0] != '\0') {
+            snprintf(lunar_str, sizeof(lunar_str), "%s%s %s",
+                     lunar.month_name, lunar.day_name, lunar.jieqi);
+        } else {
+            snprintf(lunar_str, sizeof(lunar_str), "%s%s",
+                     lunar.month_name, lunar.day_name);
+        }
+        lv_obj_set_style_text_font(weather_label, FONT_CJK, LV_PART_MAIN);
+        lv_label_set_text(weather_label, lunar_str);
+        LOG_INF("[LUNAR] %s%s (jieqi='%s') year=%d month=%d day=%d leap=%d",
+                lunar.month_name, lunar.day_name, lunar.jieqi,
+                lunar.year, lunar.month, lunar.day, lunar.leap_month);
+    } else {
+        char temp_str[32];
+        snprintf(temp_str, sizeof(temp_str), "%dF, +%d, %d%%",
+                 sim_temp, sim_temp_hi - sim_temp, sim_humidity);
+        lv_obj_set_style_text_font(temp_label, FONT_MED, LV_PART_MAIN);
+        lv_label_set_text(temp_label, temp_str);
+
+        lv_obj_set_style_text_font(weather_label, FONT_MED, LV_PART_MAIN);
+        lv_label_set_text(weather_label, "PARTLY CLOUDY");
+        LOG_INF("[WEATHER] %s | PARTLY CLOUDY", temp_str);
+    }
 }
 
 void watchface_update_battery(void)
@@ -881,9 +922,6 @@ void watchface_update_sensors(void)
 
     lv_label_set_text(field3_label, "WEEK ACT MIN:");
     led_field_set_value(field3_bg_labels, field3_val_labels, FIELD3_DIGITS, (float)sim_week_min, 0);
-
-    LOG_INF("LED values: RECOVERY=%d LAST_HR=%d WEEK_MIN=%d STEPS=%d",
-            sim_recovery, sim_last_hr, sim_week_min, sim_steps);
 
     led_field_set_value(bottom5_bg_labels, bottom5_val_labels, BOTTOM5_DIGITS, (float)sim_steps, 0);
 
