@@ -767,6 +767,18 @@ void watchface_update_date(void)
                  zhou[timeinfo.tm_wday],
                  timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday);
         lv_obj_set_style_text_font(date_label, FONT_CJK, LV_PART_MAIN);
+
+        /* DEBUG: test glyph lookup for 周(U+5468) and 日(U+65E5) */
+        {
+            const lv_font_t *cjk = FONT_CJK;
+            lv_font_glyph_dsc_t gd1, gd2;
+            bool ok1 = lv_font_get_glyph_dsc(cjk, &gd1, 0x5468, 0x5468);
+            bool ok2 = lv_font_get_glyph_dsc(cjk, &gd2, 0x65E5, 0x65E5);
+            LOG_INF("[CJK_DEBUG] 周 lookup=%d (w=%d h=%d ofs_y=%d) 日 lookup=%d (w=%d h=%d ofs_y=%d) font=%p line_h=%d",
+                    ok1, gd1.box_w, gd1.box_h, gd1.ofs_y,
+                    ok2, gd2.box_w, gd2.box_h, gd2.ofs_y,
+                    (const void *)cjk, cjk->line_height);
+        }
     } else {
         const char *weekday_str;
         if (timeinfo.tm_wday == 0) {
