@@ -147,6 +147,9 @@ static int sim_steps = 8542;
 static int sim_temp = 59;
 static int sim_temp_hi = 63;
 static int sim_humidity = 27;
+static int sim_wind_mps = 4;         /* 风速，m/s */
+static int sim_wind_bearing = 225;   /* 风向：风"从"哪个方位来，正北起顺时针度数 */
+static int sim_precip = 40;          /* 降水概率 % */
 static int sim_recovery = 5;
 static int sim_last_hr = 80;
 static int sim_week_min = 0;
@@ -205,6 +208,21 @@ static void watchface_invalidate_cache(void)
     weather_next_refresh = 0;
 }
 
+/* 风向箭头。同 Segment34 的 getWind()：
+ *     bearing = ((Math.round((windBearing + 180) / 45.0) % 8) + 97).toChar()
+ * 把风向量化成 8 个方位，映射到它 LED 字体里 'a'-'h' 这 8 个箭头字形。
+ * windBearing 是"风从哪个方位吹来"，+180 换成"吹向哪" —— 所以箭头指的是
+ * 风去的方向，不是来的方向。这里用等价的整数运算（round(x/45) 写成
+ * floor((2x+45)/90)），字形换成 Unicode 箭头，已加进 FONT_CJK。 */
+static const char *wind_arrow(int bearing_deg)
+{
+    static const char *const arrows[8] = {
+        "↑", "↗", "→", "↘", "↓", "↙", "←", "↖"   /* N NE E SE S SW W NW */
+    };
+    int b = ((bearing_deg % 360) + 360) % 360;
+    return arrows[((2 * (b + 180) + 45) / 90) % 8];
+}
+
 /* 模拟数据是华氏度；界面统一按摄氏度显示。 */
 static int fahrenheit_to_celsius(int f)
 {
@@ -232,6 +250,9 @@ static void sim_update_weather(void)
     sim_temp = 55 + (rand() % 10);
     sim_temp_hi = sim_temp + 2 + (rand() % 6);
     sim_humidity = 20 + (rand() % 50);
+    sim_wind_mps = rand() % 13;
+    sim_wind_bearing = rand() % 360;
+    sim_precip = rand() % 101;
 }
 
 static lv_obj_t *root_page = NULL;
@@ -1018,14 +1039,33 @@ void watchface_update_weather(void)
      * 且行高/基线与 montserrat_12 相同，中英文这一行都用它，布局不受影响。 */
     lv_obj_set_style_text_font(temp_label, FONT_CJK, LV_PART_MAIN);
 
-    char temp_str[32];
+    char temp_str[64];
     int lo = fahrenheit_to_celsius(sim_temp);
     int hi = fahrenheit_to_celsius(sim_temp_hi);
 
+    /* 天气行沿用 Segment34 的复合字段拼法（joinFour，", " 分隔）：
+     *     温度, 风向箭头+风速, 湿度
+     * 风速取 m/s 且不带单位后缀 —— 参考实现 windUnit 默认就是 0(m/s)，
+     * getWind() 返回的就是 bearing + windspeed，中间没有分隔也没有单位。
+     *
+     * 降水概率不当成 joinFour 的第四段，而是跟在天气描述后面的括号里。
+     * 参考实现的 complicationType 63 会把湿度和降水概率并排成两个裸百分比
+     * （"27%, 40%"），谁是谁完全看不出来；它自己的 getWeatherCondition(true)
+     * 正是用 " (NN%)" 表示降水概率的，这里沿用那个写法。 */
+    char precip_str[16] = "";
+    if (sim_precip > 0) {   /* 同参考实现：概率为 0 时整段不显示 */
+        snprintf(precip_str, sizeof(precip_str), " (%d%%)", sim_precip);
+    }
+
     if (current_lang == LANG_ZH) {
-        /* 第三行：天气描述 + 摄氏温度区间，如 "多云 15~17℃" */
-        snprintf(temp_str, sizeof(temp_str), "%s %d~%d℃",
-                 locale_get_string(LOCALE_STR_PARTLY_CLOUDY), lo, hi);
+        /* 第三行："多云 15~17℃, ↗4, 27%"
+         *
+         * 中文模式没有降水概率：第四行让给了农历，天气描述只能挤在这一行，
+         * 再加 " (40%)" 就是 181px —— 这一行在圆心上方，最宽处受它的上边缘
+         * (y=32) 约束，只有 155px 可用，两头都会压到表圈上。实测过。 */
+        snprintf(temp_str, sizeof(temp_str), "%s %d~%d℃, %s%d, %d%%",
+                 locale_get_string(LOCALE_STR_PARTLY_CLOUDY), lo, hi,
+                 wind_arrow(sim_wind_bearing), sim_wind_mps, sim_humidity);
         label_set_text(temp_label, temp_str);
 
         /* 第四行：干支年 + 农历月日 + 节气 */
@@ -1035,11 +1075,16 @@ void watchface_update_weather(void)
         lv_obj_set_style_text_font(weather_label, FONT_CJK, LV_PART_MAIN);
         label_set_text(weather_label, lunar_line_for_today(&timeinfo));
     } else {
-        snprintf(temp_str, sizeof(temp_str), "%d~%d℃, %d%%", lo, hi, sim_humidity);
+        /* 第三行 "15~17℃, ↗4, 27%"，第四行 "PARTLY CLOUDY (40%)"。
+         * 英文模式第四行就是天气描述，降水概率跟在那儿，第三行省下宽度。 */
+        snprintf(temp_str, sizeof(temp_str), "%d~%d℃, %s%d, %d%%",
+                 lo, hi, wind_arrow(sim_wind_bearing), sim_wind_mps, sim_humidity);
         label_set_text(temp_label, temp_str);
 
+        char cond_str[40];
+        snprintf(cond_str, sizeof(cond_str), "PARTLY CLOUDY%s", precip_str);
         lv_obj_set_style_text_font(weather_label, FONT_MED, LV_PART_MAIN);
-        label_set_text(weather_label, "PARTLY CLOUDY");
+        label_set_text(weather_label, cond_str);
     }
 }
 

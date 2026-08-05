@@ -69,6 +69,9 @@ CHAR_GROUPS = [
     ("节气",     "小寒大立春雨水惊蛰分清明谷夏满芒种至暑处白露秋霜降冬雪"),
     ("其它",     "天"),
     ("符号",     "℃"),   # U+2103，天气行的摄氏度
+    # 天气行的风向箭头，8 个方向。对应 Segment34 LED 字体里的 'a'-'h' 字形
+    # （见 watchface.c 的 wind_arrow()）：↑ ↗ → ↘ ↓ ↙ ← ↖。
+    ("风向箭头", "↑↗→↘↓↙←↖"),
 ]
 
 
@@ -85,12 +88,19 @@ def verify_coverage(cjk_chars):
     src/ but are not in CHAR_GROUPS — those would render as placeholder boxes."""
     have = set(cjk_chars)
     used = {}
-    pattern = re.compile(r'"([^"\\\n]*(?:\\.[^"\\\n]*)*)"')
+    # 一次扫描里同时匹配字符串字面量和注释，只保留前者。注释必须排除：源码里
+    # 中文注释经常用 ASCII 引号引一段话（"元素四角"、"风从哪来"），只按引号找
+    # 字面量的话这些全会被当成待渲染文本报成缺字，真的缺字就淹在噪声里了。
+    # 字符串分支写在最前面，所以字面量内部的 // 和 /* 不会被误当注释。
+    pattern = re.compile(r'"((?:[^"\\\n]|\\.)*)"|/\*.*?\*/|//[^\n]*', re.S)
     for path in glob.glob(os.path.join(SRC_DIR, "**", "*.c"), recursive=True):
         if os.sep + "fonts" + os.sep in path:
             continue
         text = open(path, encoding="utf-8", errors="replace").read()
-        for literal in pattern.findall(text):
+        for match in pattern.finditer(text):
+            literal = match.group(1)
+            if literal is None:      # 注释
+                continue
             # locale.c stores its Chinese as \xNN escapes; fold those back first.
             decoded = re.sub(r"\\x([0-9a-fA-F]{2})",
                              lambda m: chr(int(m.group(1), 16)), literal)
