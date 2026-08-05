@@ -1,0 +1,63 @@
+/*
+ * Device tree overlay for Seeed XIAO BLE nRF52840 (Sense) + GC9A01 240x240 圆屏。
+ *
+ * 接线（GC9A01 -> XIAO BLE 排针）：
+ *   VCC  -> 3V3
+ *   GND  -> GND
+ *   CLK  -> D8  (P1.13, SPI2 SCK)
+ *   DIN  -> D10 (P1.15, SPI2 MOSI)
+ *   CS   -> D3  (P0.29, GPIO 低有效)
+ *   DC   -> D6  (P1.11, 高=数据 / 低=命令)
+ *   RST  -> D7  (P1.12, 低有效)
+ *   BL   -> D5  (P0.05, 高=背光亮，暂由外部直接上拉，未在此声明)
+ *
+ * 这份 overlay 原来在 Zephyr 4.4 上根本编不过，两处修正：
+ *
+ * 1. compatible 从 "solomon,gc9a01" 改成 "galaxycore,gc9x01x"。
+ *    Zephyr 里 GC9A01 的绑定就叫后者（dts/bindings/display/galaxycore,gc9x01x.yaml，
+ *    驱动开关 CONFIG_GC9X01X）；前者不存在，于是 chosen 的 zephyr,display 解析
+ *    不到节点，main.c 里 DEVICE_DT_GET(DT_CHOSEN(zephyr_display)) 直接编译失败。
+ *    这个绑定还要求挂在 zephyr,mipi-dbi-spi 节点下，不能直接挂在 &spi0 上。
+ *
+ * 2. 引脚改到排针实际引出的脚。XIAO BLE 只引出 D0-D10 =
+ *    P0.02/P0.03/P0.28/P0.29/P0.04/P0.05/P1.11/P1.12/P1.13/P1.14/P1.15
+ *    （见 zephyr/boards/seeed/xiao_ble/seeed_xiao_connector.dtsi），
+ *    原来写的 P0.09-P0.14 一个都没引出来（P0.09/P0.10 是 NFC 焊盘）。
+ *    而且 nRF52840 的 spi0 与 uart0 共用 SERIAL0 实例，板级 dtsi 已把 uart0
+ *    用作控制台，spi0 用不了；板子留给排针的就是 spi2（别名 xiao_spi）。
+ */
+
+#include <zephyr/dt-bindings/gpio/gpio.h>
+#include <zephyr/dt-bindings/display/panel.h>
+
+/ {
+    chosen {
+        zephyr,display = &gc9a01;
+    };
+
+    mipi_dbi_gc9a01: mipi-dbi-gc9a01 {
+        compatible = "zephyr,mipi-dbi-spi";
+        status = "okay";
+        #address-cells = <1>;
+        #size-cells = <0>;
+
+        spi-dev = <&xiao_spi>;
+        dc-gpios = <&gpio1 11 GPIO_ACTIVE_HIGH>;    /* D6 */
+        reset-gpios = <&gpio1 12 GPIO_ACTIVE_LOW>;  /* D7 */
+
+        gc9a01: gc9x01x@0 {
+            compatible = "galaxycore,gc9x01x";
+            reg = <0>;
+            mipi-max-frequency = <DT_FREQ_M(32)>;
+            pixel-format = <PANEL_PIXEL_FORMAT_RGB_565>;
+            width = <240>;
+            height = <240>;
+            display-inversion;
+        };
+    };
+};
+
+&xiao_spi {
+    status = "okay";
+    cs-gpios = <&gpio0 29 GPIO_ACTIVE_LOW>;         /* D3 */
+};

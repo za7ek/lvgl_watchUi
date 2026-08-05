@@ -3,16 +3,10 @@
 
 #include <lvgl.h>
 
+/* 只保留表盘实际画出来的两个图标；其余（steps/battery/alarm/bluetooth/
+ * moon/arrow）从未被 icon_draw() 引用，已随位图一起删除。 */
 typedef enum {
     ICON_HEART,
-    ICON_STEPS,
-    ICON_BATTERY_FULL,
-    ICON_BATTERY_EMPTY,
-    ICON_ALARM,
-    ICON_BLUETOOTH,
-    ICON_MOON,
-    ICON_ARROW_UP,
-    ICON_ARROW_DOWN,
     ICON_CALORIES,
     ICON_COUNT
 } icon_t;

@@ -16,9 +16,5 @@ typedef struct {
 } lunar_date_t;
 
 void lunar_calendar_convert(uint16_t solar_year, uint8_t solar_month, uint8_t solar_day, lunar_date_t *lunar);
-const char* lunar_get_year_name(uint16_t year);
-const char* lunar_get_month_name(uint8_t month, uint8_t leap);
-const char* lunar_get_day_name(uint8_t day);
-const char* lunar_get_jieqi(uint16_t year, uint8_t month, uint8_t day);
 
 #endif

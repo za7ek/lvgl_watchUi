@@ -1,35 +1,7 @@
 source "Kconfig.zephyr"
-menu "My Application"
-    config ZSWATCH_ROUND_SCREEN
-        bool "Enable round screen support for ZSWATCH"
-        default y
-        help
-          Enable round screen display support.
 
-config SEGMENT34_SHOW_LUNAR
-    bool "Show Lunar Calendar"
-    default y
-    help
-        Enable lunar calendar display on watchface.
-
-config SEGMENT34_LANGUAGE
-    string "Default Language"
-    default "zh"
-    help
-        Default language for the watchface.
-        Options: "zh" (Chinese), "en" (English)
-
-config SEGMENT34_THEME
-    string "Default Theme"
-    default "green"
-    help
-        Default color theme for the watchface.
-        Options: green, blue, red, orange, purple, cyan
-
-config SEGMENT34_ROUND_SCREEN
-    bool "Round Screen Support"
-    default y
-    help
-        Enable round screen layout adjustments for 240x240 displays.
-
-endmenu
+# 说明：此前这里定义过 ZSWATCH_ROUND_SCREEN / SEGMENT34_SHOW_LUNAR /
+# SEGMENT34_LANGUAGE / SEGMENT34_THEME / SEGMENT34_ROUND_SCREEN 五个选项，
+# 但 src/ 里一次都没有引用（默认语言写死在 locale.c，默认主题写死在
+# watchface_start()，圆屏布局是硬编码的 240x240）。留着只会让人以为改配置
+# 能生效，故一并删除。需要做成可配置项时再连同代码一起加回来。

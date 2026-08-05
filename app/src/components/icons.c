@@ -20,103 +20,6 @@ static const uint8_t icon_heart[8] = {
     0b00000000,
 };
 
-static const uint8_t icon_steps[11] = {
-    0b00011000,
-    0b00111100,
-    0b01111110,
-    0b01111110,
-    0b00111100,
-    0b00011000,
-    0b00111100,
-    0b01111110,
-    0b01111110,
-    0b00111100,
-    0b00011000,
-};
-
-static const uint8_t icon_battery_full[8] = {
-    0b01111110,
-    0b11111111,
-    0b11111111,
-    0b11111111,
-    0b11111111,
-    0b11111111,
-    0b11111111,
-    0b01111110,
-};
-
-static const uint8_t icon_battery_empty[8] = {
-    0b01111110,
-    0b10000001,
-    0b10000001,
-    0b10000001,
-    0b10000001,
-    0b10000001,
-    0b10000001,
-    0b01111110,
-};
-
-static const uint8_t icon_alarm[10] = {
-    0b00011000,
-    0b00111100,
-    0b01111110,
-    0b01111110,
-    0b01111110,
-    0b01111110,
-    0b00111100,
-    0b00011000,
-    0b00111100,
-    0b00000000,
-};
-
-static const uint8_t icon_bluetooth[9] = {
-    0b00010000,
-    0b00111000,
-    0b01101100,
-    0b01000100,
-    0b00101000,
-    0b01000100,
-    0b01101100,
-    0b00111000,
-    0b00010000,
-};
-
-static const uint8_t icon_moon[9] = {
-    0b00111100,
-    0b01111110,
-    0b11100111,
-    0b11000011,
-    0b11000011,
-    0b11000011,
-    0b11100111,
-    0b01111110,
-    0b00111100,
-};
-
-static const uint8_t icon_arrow_up[9] = {
-    0b00011000,
-    0b00111100,
-    0b01111110,
-    0b11111111,
-    0b00011000,
-    0b00011000,
-    0b00011000,
-    0b00011000,
-    0b00000000,
-};
-
-static const uint8_t icon_arrow_down[9] = {
-    0b00011000,
-    0b00011000,
-    0b00011000,
-    0b00011000,
-    0b11111111,
-    0b01111110,
-    0b00111100,
-    0b00011000,
-    0b00000000,
-};
-
 static const uint8_t icon_calories[9] = {
     0b00111100,
     0b01000010,
@@ -132,17 +35,9 @@ static const uint8_t icon_calories[9] = {
 static const uint8_t *get_icon_data(icon_t icon, int *height)
 {
     switch (icon) {
-    case ICON_HEART:       *height = 8;  return icon_heart;
-    case ICON_STEPS:       *height = 11; return icon_steps;
-    case ICON_BATTERY_FULL:*height = 8;  return icon_battery_full;
-    case ICON_BATTERY_EMPTY:*height = 8; return icon_battery_empty;
-    case ICON_ALARM:       *height = 10; return icon_alarm;
-    case ICON_BLUETOOTH:   *height = 9;  return icon_bluetooth;
-    case ICON_MOON:        *height = 9;  return icon_moon;
-    case ICON_ARROW_UP:    *height = 9;  return icon_arrow_up;
-    case ICON_ARROW_DOWN:  *height = 9;  return icon_arrow_down;
-    case ICON_CALORIES:    *height = 9;  return icon_calories;
-    default:               *height = 0;  return NULL;
+    case ICON_HEART:    *height = 8; return icon_heart;
+    case ICON_CALORIES: *height = 9; return icon_calories;
+    default:            *height = 0; return NULL;
     }
 }
 

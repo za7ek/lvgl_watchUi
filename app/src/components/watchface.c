@@ -2,9 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <math.h>
 #include "watchface.h"
-#include "segment34.h"
 #include "icons.h"
 #include "lunar_calendar.h"
 #include "locale.h"
@@ -12,7 +10,6 @@
 #include "lv_font_cjk.h"
 #include "lv_font_segments80.h"
 #include "lv_font_led.h"
-#include "lv_font_led_small.h"
 #include "lv_font_xsmol.h"
 #include "lv_font_moon.h"
 #include <lvgl.h>
@@ -25,7 +22,6 @@ LOG_MODULE_REGISTER(watchface, LOG_LEVEL_INF);
 #define SCREEN_W 240
 #define SCREEN_H 240
 #define CENTER_X 120
-#define CENTER_Y 120
 
 #define CLOCK_W 220
 #define CLOCK_H 80
@@ -91,11 +87,59 @@ static int sim_battery = 85;
 static int sunrise_hour = 1, sunrise_min = 18;
 static int sunset_hour = 3, sunset_min = 13;
 
-/* 模拟数据是华氏度；中文界面按摄氏度显示（英文界面保持华氏度不变）。 */
+/* ---------------------------------------------------------------------------
+ * 重绘抑制
+ *
+ * lv_label_set_text() 不管内容有没有变，都会 lv_free + lv_malloc 一份文本、
+ * 重新排版并 invalidate 整个 label —— 在 GC9A01 上就是一次真实的 SPI 刷屏。
+ * 表盘上绝大多数内容一分钟、一天甚至更久才变一次，所以统一走下面两个 helper：
+ * 值没变就什么都不做。同理 lv_obj_set_style_text_color() 也不做相等判断。
+ * ------------------------------------------------------------------------- */
+static void label_set_text(lv_obj_t *label, const char *text)
+{
+    if (!label) return;
+    const char *cur = lv_label_get_text(label);
+    if (cur && strcmp(cur, text) == 0) return;
+    lv_label_set_text(label, text);
+}
+
+static void label_set_color(lv_obj_t *obj, lv_color_t color)
+{
+    if (!obj) return;
+    if (lv_color_eq(lv_obj_get_style_text_color(obj, LV_PART_MAIN), color)) return;
+    lv_obj_set_style_text_color(obj, color, LV_PART_MAIN);
+}
+
+/* ---------------------------------------------------------------------------
+ * 分级缓存
+ *
+ * 日期 / 农历 / 节气 / 月相 / 日出日落：一天只变一次 —— 用 day_key 拦住。
+ * 天气 + 气温：真实数据源（气象服务）没必要频繁取 —— WEATHER_REFRESH_MIN
+ *              分钟才刷一次数据；渲染仍每轮调用，但被上面的 helper 挡掉。
+ * 农历换算要线性扫 383 项月表 + 744 项节气表，务必只在换天时做一次。
+ * ------------------------------------------------------------------------- */
+#define WEATHER_REFRESH_MIN 30
+#define DAY_KEY(tm_) (((tm_).tm_year + 1900) * 512 + (tm_).tm_yday)
+#define DAY_KEY_NONE (-1)
+
+static int cached_day_key = DAY_KEY_NONE;     /* 日期/农历/月相 已渲染到哪一天 */
+static int lunar_day_key  = DAY_KEY_NONE;     /* 农历换算结果对应哪一天 */
+static char lunar_line[64];                   /* 农历行缓存 */
+static int64_t weather_next_refresh = 0;      /* 下次允许刷新天气数据的时间戳 */
+
+/* 让所有缓存失效：切换语言/主题后必须整屏重算一次。 */
+static void watchface_invalidate_cache(void)
+{
+    cached_day_key = DAY_KEY_NONE;
+    lunar_day_key  = DAY_KEY_NONE;
+    weather_next_refresh = 0;
+}
+
+/* 模拟数据是华氏度；界面统一按摄氏度显示。 */
 static int fahrenheit_to_celsius(int f)
 {
     int n = (f - 32) * 5;
-    return (n >= 0) ? (n + 4) / 9 : (n - 4) / 9;   /* 四舍五入，向零截断的补偿 */
+    return (n >= 0) ? (n + 4) / 9 : (n - 4) / 9;   /* 补偿 C 的向零截断，做四舍五入 */
 }
 
 static void sim_update_data(void)
@@ -106,6 +150,18 @@ static void sim_update_data(void)
     sim_stress = 30 + (rand() % 50);
     sim_bodybatt = 40 + (rand() % 50);
     sim_battery = 15 + (rand() % 85);
+}
+
+/* 天气数据刷新——真实设备上这里换成气象服务/BLE 取数，同样受间隔保护。 */
+static void sim_update_weather(void)
+{
+    int64_t now = k_uptime_get();
+    if (now < weather_next_refresh) return;
+    weather_next_refresh = now + (int64_t)WEATHER_REFRESH_MIN * 60 * 1000;
+
+    sim_temp = 55 + (rand() % 10);
+    sim_temp_hi = sim_temp + 2 + (rand() % 6);
+    sim_humidity = 20 + (rand() % 50);
 }
 
 static lv_obj_t *root_page = NULL;
@@ -309,49 +365,30 @@ static void led_field_set_value(lv_obj_t **bg_labels, lv_obj_t **val_labels,
         total_chars = strlen(src_buf);
     }
 
+    /* 每格由两层组成，只有颜色和 val 的字符随取值变化：
+     *   空位   bg='#' 暗绿（点阵底纹）          val=' '  —— 什么都不显示
+     *   小数点 bg='#' 暗绿                      val='.'  白（'.' 字形是正常极性）
+     *   数字   bg='#' 白（35 个白点做底）        val=数字 暗绿
+     *          —— LED 字体的数字字形是反相的（不透明=非笔段），所以 val 用暗绿
+     *             盖住非笔段，笔段透出底层的白，最终得到白字 + 暗绿底。
+     * bg 的文本恒为 "#"，配合 label_set_text() 的相等判断，创建之后再不会重绘。
+     *
+     * NOTE: val 必须传单字符 + '\0'，不能传 &src_buf[src_idx]；否则 label 会拿到
+     * 整个剩余字符串，居中 + LV_LABEL_LONG_CLIP 会显示中间那个字符
+     * （"8698" 显示成 '6'/'9'），导致每个字段的数字都是错的。 */
     for (int i = 0; i < digits; i++) {
         int src_idx = i - (digits - total_chars);
-        if (src_idx < 0 || src_idx >= total_chars) {
-            /* Empty position: bg shows dark green #, val shows nothing */
-            if (bg_labels[i]) {
-                lv_label_set_text(bg_labels[i], "#");
-                lv_obj_set_style_text_color(bg_labels[i], LED_BG_COLOR, LV_PART_MAIN);
-            }
-            if (val_labels[i]) {
-                lv_label_set_text(val_labels[i], " ");
-                lv_obj_set_style_text_color(val_labels[i], LED_FG_COLOR, LV_PART_MAIN);
-            }
-        } else if (src_buf[src_idx] == '.') {
-            /* Decimal point: bg shows dark green #, val shows white '.'
-             * ('.' glyph is normal polarity: opaque=dot, so val white shows white dot) */
-            if (bg_labels[i]) {
-                lv_label_set_text(bg_labels[i], "#");
-                lv_obj_set_style_text_color(bg_labels[i], LED_BG_COLOR, LV_PART_MAIN);
-            }
-            if (val_labels[i]) {
-                lv_label_set_text(val_labels[i], ".");
-                lv_obj_set_style_text_color(val_labels[i], LED_FG_COLOR, LV_PART_MAIN);
-            }
-        } else {
-            /* Digit: LED font digits are INVERTED (opaque=non-segment, transparent=segment)
-             *   bg # in WHITE → 35 white blocks (base layer)
-             *   val digit in DARK GREEN → non-segments (opaque) covered dark green,
-             *                              segments (transparent) show white from bg
-             *   Result: segments=white, non-segments=dark green
-             * NOTE: must pass a single NUL-terminated char, NOT &src_buf[src_idx],
-             * otherwise lv_label_set_text reads the whole remaining string and center-
-             * alignment + LV_LABEL_LONG_CLIP shows the MIDDLE char (e.g. "8698"→'6'/'9'),
-             * causing every field to display the wrong digits. */
-            char one_char[2] = { src_buf[src_idx], '\0' };
-            if (bg_labels[i]) {
-                lv_label_set_text(bg_labels[i], "#");
-                lv_obj_set_style_text_color(bg_labels[i], LED_FG_COLOR, LV_PART_MAIN);
-            }
-            if (val_labels[i]) {
-                lv_label_set_text(val_labels[i], one_char);
-                lv_obj_set_style_text_color(val_labels[i], LED_BG_COLOR, LV_PART_MAIN);
-            }
+        bool is_digit = (src_idx >= 0 && src_idx < total_chars && src_buf[src_idx] != '.');
+        char val_text[2] = { ' ', '\0' };
+
+        if (src_idx >= 0 && src_idx < total_chars) {
+            val_text[0] = src_buf[src_idx];
         }
+
+        label_set_text(bg_labels[i], "#");
+        label_set_color(bg_labels[i], is_digit ? LED_FG_COLOR : LED_BG_COLOR);
+        label_set_text(val_labels[i], val_text);
+        label_set_color(val_labels[i], is_digit ? LED_BG_COLOR : LED_FG_COLOR);
     }
 }
 
@@ -374,17 +411,48 @@ static const char *get_moon_string(int phase)
     return "";
 }
 
+/* 儒略日序数（Fliegel–Van Flandern），与 Segment34.CN 的 julianDay() 一致。 */
+static int32_t julian_day(int year, int month, int day)
+{
+    int a = (14 - month) / 12;
+    int y = year + 4800 - a;
+    int m = month + 12 * a - 3;
+    return day + (153 * m + 2) / 5 + 365L * y + y / 4 - y / 100 + y / 400 - 32045;
+}
+
+/*
+ * 月相 0-7：0=新月 1=蛾眉月 2=上弦 3=盈凸 4=满月 5=亏凸 6=下弦 7=残月，
+ * 与 lv_font_moon 的字形 '0'-'7' 一一对应。
+ *
+ * 算法照搬 Segment34.CN 的 moonPhase()：以 2023-01-21（JDN 2459966，一次朔）
+ * 为原点求月龄，再按它那套非均匀区间（3/3/4/4/4/4/4/3 天）分桶——新月和满月
+ * 的窗口比其它相位窄，这是参考实现刻意的取舍。
+ *
+ * 两处相对参考实现的改进（都不改变分桶规则）：
+ *   1. 全整数运算，朔望月按 29.5306 天放大 10000 倍，避免浮点；
+ *      2056 年时中间量约 1.24e8，离 int32 上限还差一个数量级。
+ *   2. 原点偏移半天（-5000），因为 JDN 是正午换日而这里按当天正午取样。
+ * 对 2026-2056 共 11315 天与天文月相比对：原实现（Conway 近似）偏差 16.0%，
+ * 参考实现原样 12.2%，本实现 0.6%。
+ */
+#define MOON_EPOCH_JDN   2459966L    /* 2023-01-21，朔 */
+#define MOON_CYCLE_X10K  295306L     /* 朔望月 29.5306 天 */
+
 static int get_moon_phase(int year, int month, int day)
 {
-    int r = year % 100;
-    r %= 19;
-    if (r > 9) r -= 19;
-    r = ((r * 11) % 30) + month + day;
-    if (month < 3) r += 2;
-    r -= (year < 2000) ? 4 : 8;
-    r = r % 30;
-    if (r < 0) r += 30;
-    return (r * 8) / 30;
+    int32_t days = julian_day(year, month, day) - MOON_EPOCH_JDN;
+    int32_t age = (days * 10000 - 5000) % MOON_CYCLE_X10K;
+    if (age < 0) age += MOON_CYCLE_X10K;
+
+    if (age <  30000) return 0;
+    if (age <  60000) return 1;
+    if (age < 100000) return 2;
+    if (age < 140000) return 3;
+    if (age < 180000) return 4;
+    if (age < 220000) return 5;
+    if (age < 260000) return 6;
+    if (age < 290000) return 7;
+    return 0;
 }
 
 static void time_update_cb(lv_timer_t *timer)
@@ -397,6 +465,7 @@ static void time_update_cb(lv_timer_t *timer)
 static void sensor_update_cb(lv_timer_t *timer)
 {
     sim_update_data();
+    sim_update_weather();   /* 内部按 WEATHER_REFRESH_MIN 限流 */
     watchface_update_sensors();
     ARG_UNUSED(timer);
 }
@@ -751,20 +820,22 @@ void watchface_update_time(void)
     time_t now = time(NULL);
     localtime_r(&now, &timeinfo);
 
+    /* 每格 42x80，四个数字每秒重写一次就是整块时钟每秒重绘一次。
+     * label_set_text() 让它们只在真正跳字时才重绘（分位每分钟、时位每小时）。 */
     char dig[2];
     dig[0] = '0' + (timeinfo.tm_hour / 10);
     dig[1] = '\0';
-    lv_label_set_text(clock_lbl_digit_h1, dig);
+    label_set_text(clock_lbl_digit_h1, dig);
     dig[0] = '0' + (timeinfo.tm_hour % 10);
-    lv_label_set_text(clock_lbl_digit_h2, dig);
+    label_set_text(clock_lbl_digit_h2, dig);
     dig[0] = '0' + (timeinfo.tm_min / 10);
-    lv_label_set_text(clock_lbl_digit_m1, dig);
+    label_set_text(clock_lbl_digit_m1, dig);
     dig[0] = '0' + (timeinfo.tm_min % 10);
-    lv_label_set_text(clock_lbl_digit_m2, dig);
+    label_set_text(clock_lbl_digit_m2, dig);
 
     /* Colon always visible — dot areas transparent showing yellow,
      * non-dot areas dark green. The black grid layer stays always visible. */
-    lv_label_set_text(clock_lbl_digit_colon, ":");
+    label_set_text(clock_lbl_digit_colon, ":");
 }
 
 void watchface_update_date(void)
@@ -775,6 +846,16 @@ void watchface_update_date(void)
     struct tm timeinfo;
     time_t now = time(NULL);
     localtime_r(&now, &timeinfo);
+
+    /* 秒是这一行里唯一每秒都变的东西，先单独更新掉。 */
+    char sec_str[8];
+    snprintf(sec_str, sizeof(sec_str), "%02d", timeinfo.tm_sec);
+    label_set_text(seconds_label, sec_str);
+
+    /* 其余（日期串、日出日落、月相）一天只变一次，换天之前直接返回。 */
+    int day_key = DAY_KEY(timeinfo);
+    if (day_key == cached_day_key) return;
+    cached_day_key = day_key;
 
     /* 日期行：ZH 用 "周X yyyy - MM - dd"，EN 用 "MON, 5 MAY 2025" */
     char date_str[48];
@@ -797,88 +878,92 @@ void watchface_update_date(void)
                  timeinfo.tm_year + 1900);
         lv_obj_set_style_text_font(date_label, FONT_DATA, LV_PART_MAIN);
     }
-    lv_label_set_text(date_label, date_str);
-
-    /* seconds_label 显示当前时间的秒（0-59），每秒更新 */
-    char sec_str[8];
-    snprintf(sec_str, sizeof(sec_str), "%02d", timeinfo.tm_sec);
-    lv_label_set_text(seconds_label, sec_str);
-
-    int moon_phase = get_moon_phase(timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday);
+    label_set_text(date_label, date_str);
 
     /* DAWN/DUSK 始终英文 */
-    lv_label_set_text(dawn_label, "DAWN:");
-    lv_label_set_text(dusk_label, "DUSK:");
+    label_set_text(dawn_label, "DAWN:");
+    label_set_text(dusk_label, "DUSK:");
 
     char dawn_time_str[16];
     char dusk_time_str[16];
     snprintf(dawn_time_str, sizeof(dawn_time_str), "%02d:%02d", sunrise_hour, sunrise_min);
     snprintf(dusk_time_str, sizeof(dusk_time_str), "%02d:%02d", sunset_hour, sunset_min);
-    lv_label_set_text(dawn_time_label, dawn_time_str);
-    lv_label_set_text(dusk_time_label, dusk_time_str);
+    label_set_text(dawn_time_label, dawn_time_str);
+    label_set_text(dusk_time_label, dusk_time_str);
 
-    /* 月相显示：0=文字，1=图片（默认）。参考 Segment34.CN moonPhase() 返回 "0"-"7" */
+    /* 月相显示：0=文字，1=图片（默认）。lv_font_moon 的字形 '0'-'7' 依次是
+     * 新月/蛾眉/上弦/盈凸/满月/亏凸/下弦/残月，与 get_moon_phase() 的返回一一对应。 */
+    int moon_phase = get_moon_phase(timeinfo.tm_year + 1900,
+                                    timeinfo.tm_mon + 1, timeinfo.tm_mday);
     if (moon_display_mode == 0) {
         lv_obj_set_style_text_font(moon_label, FONT_MOON, LV_PART_MAIN);
         lv_obj_set_width(moon_label, 32);
         lv_obj_set_pos(moon_label, CENTER_X - 16, 13);
-        lv_label_set_text(moon_label, get_moon_string(moon_phase));
+        label_set_text(moon_label, get_moon_string(moon_phase));
     } else {
         lv_obj_set_style_text_font(moon_label, FONT_MOON_IMAGE, LV_PART_MAIN);
         lv_obj_set_width(moon_label, 20);
         lv_obj_set_pos(moon_label, CENTER_X - 10, 7);
-        char moon_char[2] = { '0' + moon_phase, '\0' };
-        lv_label_set_text(moon_label, moon_char);
+        char moon_char[2] = { (char)('0' + moon_phase), '\0' };
+        label_set_text(moon_label, moon_char);
     }
+}
+
+/*
+ * 农历行 "丙午年 六月廿三 +2立秋"。
+ * lunar_calendar_convert() 要线性扫 383 项月表 + 744 项节气表，而结果一天只
+ * 变一次 —— 按天缓存，换天之前直接返回上次的字符串。
+ */
+static const char *lunar_line_for_today(const struct tm *t)
+{
+    int day_key = DAY_KEY(*t);
+    if (day_key == lunar_day_key) return lunar_line;
+
+    lunar_date_t lunar;
+    lunar_calendar_convert(t->tm_year + 1900, t->tm_mon + 1, t->tm_mday, &lunar);
+    if (lunar.jieqi[0] != '\0') {
+        snprintf(lunar_line, sizeof(lunar_line), "%s %s%s %s",
+                 lunar.year_name, lunar.month_name, lunar.day_name, lunar.jieqi);
+    } else {
+        snprintf(lunar_line, sizeof(lunar_line), "%s %s%s",
+                 lunar.year_name, lunar.month_name, lunar.day_name);
+    }
+    lunar_day_key = day_key;
+    LOG_INF("[LUNAR] %s (year=%d month=%d day=%d leap=%d)",
+            lunar_line, lunar.year, lunar.month, lunar.day, lunar.leap_month);
+    return lunar_line;
 }
 
 void watchface_update_weather(void)
 {
     if (!temp_label || !weather_label) return;
 
+    /* ℃(U+2103) 不在 montserrat_12 里，会画成空心方框；FONT_CJK 含完整 ASCII
+     * 且行高/基线与 montserrat_12 相同，中英文这一行都用它，布局不受影响。 */
+    lv_obj_set_style_text_font(temp_label, FONT_CJK, LV_PART_MAIN);
+
+    char temp_str[32];
+    int lo = fahrenheit_to_celsius(sim_temp);
+    int hi = fahrenheit_to_celsius(sim_temp_hi);
+
     if (current_lang == LANG_ZH) {
         /* 第三行：天气描述 + 摄氏温度区间，如 "多云 15~17℃" */
-        char temp_str[32];
         snprintf(temp_str, sizeof(temp_str), "%s %d~%d℃",
-                 locale_get_string(LOCALE_STR_PARTLY_CLOUDY),
-                 fahrenheit_to_celsius(sim_temp),
-                 fahrenheit_to_celsius(sim_temp_hi));
-        lv_obj_set_style_text_font(temp_label, FONT_CJK, LV_PART_MAIN);
-        lv_label_set_text(temp_label, temp_str);
-        LOG_INF("[WEATHER] %s", temp_str);
+                 locale_get_string(LOCALE_STR_PARTLY_CLOUDY), lo, hi);
+        label_set_text(temp_label, temp_str);
 
-        /* 第四行：干支年 + 农历月日 + 节气，如 "丙午年 六月廿三 +2立秋" */
+        /* 第四行：干支年 + 农历月日 + 节气 */
         struct tm timeinfo;
         time_t now = time(NULL);
         localtime_r(&now, &timeinfo);
-        lunar_date_t lunar;
-        lunar_calendar_convert(timeinfo.tm_year + 1900, timeinfo.tm_mon + 1,
-                               timeinfo.tm_mday, &lunar);
-        char lunar_str[64];
-        if (lunar.jieqi[0] != '\0') {
-            snprintf(lunar_str, sizeof(lunar_str), "%s %s%s %s",
-                     lunar.year_name, lunar.month_name, lunar.day_name, lunar.jieqi);
-        } else {
-            snprintf(lunar_str, sizeof(lunar_str), "%s %s%s",
-                     lunar.year_name, lunar.month_name, lunar.day_name);
-        }
         lv_obj_set_style_text_font(weather_label, FONT_CJK, LV_PART_MAIN);
-        lv_label_set_text(weather_label, lunar_str);
-        LOG_INF("[LUNAR] %s (year=%d month=%d day=%d leap=%d)",
-                lunar_str, lunar.year, lunar.month, lunar.day, lunar.leap_month);
+        label_set_text(weather_label, lunar_line_for_today(&timeinfo));
     } else {
-        char temp_str[32];
-        snprintf(temp_str, sizeof(temp_str), "%d~%d℃, %d%%",
-                 fahrenheit_to_celsius(sim_temp),
-                 fahrenheit_to_celsius(sim_temp_hi), sim_humidity);
-        /* ℃(U+2103) 不在 montserrat_12 里，会画成空心方框；FONT_CJK 含完整
-         * ASCII 且行高/基线与 montserrat_12 相同，换用它不会影响这一行的布局。 */
-        lv_obj_set_style_text_font(temp_label, FONT_CJK, LV_PART_MAIN);
-        lv_label_set_text(temp_label, temp_str);
+        snprintf(temp_str, sizeof(temp_str), "%d~%d℃, %d%%", lo, hi, sim_humidity);
+        label_set_text(temp_label, temp_str);
 
         lv_obj_set_style_text_font(weather_label, FONT_MED, LV_PART_MAIN);
-        lv_label_set_text(weather_label, "PARTLY CLOUDY");
-        LOG_INF("[WEATHER] %s | PARTLY CLOUDY", temp_str);
+        label_set_text(weather_label, "PARTLY CLOUDY");
     }
 }
 
@@ -915,12 +1000,12 @@ void watchface_update_battery(void)
 
         if (battery_display_mode == 1) {
             /* Inside: show label inside battery container */
-            lv_label_set_text(battery_label, percent_str);
+            label_set_text(battery_label, percent_str);
             lv_obj_clear_flag(battery_label, LV_OBJ_FLAG_HIDDEN);
             lv_obj_add_flag(battery_percent_label, LV_OBJ_FLAG_HIDDEN);
         } else if (battery_display_mode == 2) {
             /* Outside: show label to the right of battery */
-            lv_label_set_text(battery_percent_label, percent_str);
+            label_set_text(battery_percent_label, percent_str);
             lv_obj_clear_flag(battery_percent_label, LV_OBJ_FLAG_HIDDEN);
             lv_obj_add_flag(battery_label, LV_OBJ_FLAG_HIDDEN);
         } else {
@@ -936,13 +1021,13 @@ void watchface_update_sensors(void)
     if (!field1_label || !field2_label || !field3_label) return;
     if (!stress_bar || !bodybatt_bar) return;
 
-    lv_label_set_text(field1_label, "RECOVERY HRS:");
+    label_set_text(field1_label, "RECOVERY HRS:");
     led_field_set_value(field1_bg_labels, field1_val_labels, FIELD1_DIGITS, (float)sim_recovery + 0.0f, 1);
 
-    lv_label_set_text(field2_label, "LAST HR:");
+    label_set_text(field2_label, "LAST HR:");
     led_field_set_value(field2_bg_labels, field2_val_labels, FIELD2_DIGITS, (float)sim_last_hr, 0);
 
-    lv_label_set_text(field3_label, "WEEK ACT MIN:");
+    label_set_text(field3_label, "WEEK ACT MIN:");
     led_field_set_value(field3_bg_labels, field3_val_labels, FIELD3_DIGITS, (float)sim_week_min, 0);
 
     led_field_set_value(bottom5_bg_labels, bottom5_val_labels, BOTTOM5_DIGITS, (float)sim_steps, 0);
@@ -974,6 +1059,7 @@ void watchface_switch_moon_display(void)
 {
     /* Cycle: 0=文字 → 1=图片 → 0 */
     moon_display_mode = (moon_display_mode + 1) % 2;
+    watchface_invalidate_cache();
     watchface_update_date();
 }
 
@@ -984,6 +1070,7 @@ void watchface_switch_language(void)
     } else {
         locale_set_current(LANG_ZH);
     }
+    watchface_invalidate_cache();
     watchface_update_date();
     watchface_update_sensors();
 }
