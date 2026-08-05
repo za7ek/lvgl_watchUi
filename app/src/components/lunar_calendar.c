@@ -345,7 +345,7 @@ void lunar_calendar_convert(uint16_t solar_year, uint8_t solar_month, uint8_t so
         } else if (SOLAR_TERMS_OFFSETS[i] > (uint16_t)target_days) {
             int days_to_term = SOLAR_TERMS_OFFSETS[i] - target_days;
             if (days_to_term <= 15) {
-                snprintf(lunar->jieqi, sizeof(lunar->jieqi), "+%d天%s",
+                snprintf(lunar->jieqi, sizeof(lunar->jieqi), "+%d%s",
                          days_to_term, SOLAR_TERMS[i % 24]);
             } else {
                 lunar->jieqi[0] = '\0';
@@ -402,7 +402,7 @@ const char *lunar_get_jieqi(uint16_t year, uint8_t month, uint8_t day)
         } else if (SOLAR_TERMS_OFFSETS[i] > (uint16_t)target_days) {
             int days_to_term = SOLAR_TERMS_OFFSETS[i] - target_days;
             if (days_to_term <= 15) {
-                snprintf(buf, sizeof(buf), "+%d天%s", days_to_term, SOLAR_TERMS[i % 24]);
+                snprintf(buf, sizeof(buf), "+%d%s", days_to_term, SOLAR_TERMS[i % 24]);
             }
             return buf;
         }

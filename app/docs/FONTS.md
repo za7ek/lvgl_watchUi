@@ -28,54 +28,68 @@
 ### 2.1 前置条件
 
 ```bash
-pip install Pillow
-# 需要系统字体 simhei.ttf（Windows 自带，路径：C:\Windows\Fonts\simhei.ttf）
+cd ~/zephyr-project && source .venv/bin/activate    # venv 里已装 Pillow
+# 需要系统字体 /usr/share/fonts/truetype/wqy/wqy-zenhei.ttc
 ```
 
 ### 2.2 使用方法
 
 ```bash
-python gen_cjk_font.py
+cd ~/zephyr-project && source .venv/bin/activate
+python3 lgvl_watchUi/gen_cjk_font.py
 ```
+
+脚本会先做一次覆盖率自检：扫描 `app/src/**/*.c` 里所有字符串字面量（含 `locale.c`
+的 `\xNN` 转义），凡是用到但不在 `CHAR_GROUPS` 里的汉字都会打印告警——这些字
+在界面上会显示成空心方框。
 
 ### 2.3 特点
 
 - 纯 Python 实现，无需 Node.js
-- 4bpp（16级灰度）格式，显示效果更好
-- 字体大小 16px，使用 Windows 的 `simhei.ttf`
-- 手动渲染字符并提取位图数据
-- 支持两段 cmap：ASCII (0x20-0x7E) + CJK 稀疏映射
-- 输出路径直接指向 WSL：`\\wsl$\Ubuntu\home\zheng_fang\...`
+- 4bpp（16 级灰度）格式
+- 13px，使用 `wqy-zenhei.ttc`（文泉驿正黑，为小字号做过 hinting；SimSun 在
+  14px 以下会糊成一团，露/霜/蛰 这类密集字尤其明显）
+- `line_height=15 / base_line=3`，与 `lv_font_montserrat_12` 完全一致，因此
+  中文行与英文行占用相同的垂直空间，布局无需按语言区分
+- cmap：ASCII (0x20-0x7E) 一段 + CJK 连续码位合并后的若干 FORMAT0_TINY 段
 
 ### 2.4 关键参数
 
 位于 `gen_cjk_font.py` 文件开头：
 
 ```python
-TTF_PATH = r"C:\Windows\Fonts\simhei.ttf"   # 字体文件路径
-FONT_SIZE = 16                                # 字体大小
-BPP = 4                                       # 每像素位数
-OUT_PATH = r"\\wsl$\Ubuntu\home\zheng_fang\zephyr-project\lgvl_watchUi\app\src\fonts\lv_font_cjk.c"
-ASCII_START = 0x20
-ASCII_END = 0x7E
-CJK_STRINGS = [...]                           # 需要包含的 CJK 字符列表
-FONT_NAME = "lv_font_cjk_16"
-LINE_HEIGHT = 18
-BASE_LINE = 2
+TTF_PATH   = "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc"
+TTF_INDEX  = 0
+FONT_SIZE  = 13
+BPP        = 4
+LINE_HEIGHT = 15    # 与 lv_font_montserrat_12 对齐
+BASE_LINE   = 3
+CHAR_GROUPS = [...] # 需要包含的汉字，按来源分组
 ```
 
 ### 2.5 修改字符集
 
-编辑 `CJK_STRINGS` 列表，添加或删除需要的字符：
+编辑 `CHAR_GROUPS`，按数据来源分组添加，然后重新运行脚本并看覆盖率自检输出：
 
 ```python
-CJK_STRINGS = [
-    u"一二三四五六七八九十",
-    u"月日年星期天气",
-    u"晴多云阴雨雪",
-    # 在此添加更多字符...
+CHAR_GROUPS = [
+    ("天气",   "晴多云阴雨雪"),
+    ("节气",   "小寒大立春雨水惊蛰分清明谷夏满芒种至暑处白露秋霜降冬雪"),
+    # 在此添加更多分组...
 ]
 ```
+
+### 2.6 两个必须踩对的坑
+
+1. **`.stride` 必须为 1。** 脚本把每个字形的每一行都补齐到整字节
+   （4bpp 下 `(box_w + 1) // 2` 字节）。LVGL 只有在 `lv_font_fmt_txt_dsc_t.stride != 0`
+   时才会跳过这段行尾填充；`stride = 0` 时它把整个位图当成一条连续的 nibble 流来
+   读，于是**所有 box_w 为奇数的字形**每往下一行就多错半个像素，整个汉字变成斜噪点。
+
+2. **LVGL 的字符串编码必须是 UTF-8。** `CONFIG_LV_CONF_MINIMAL=y` 会让
+   `LV_TXT_ENC` 默认成 ASCII，此时 LVGL 把 UTF-8 的每个字节当成一个独立码位，
+   一个汉字 = 3 个找不到的码位 = 3 个空心方框（`LV_USE_FONT_PLACEHOLDER`）。
+   `prj.conf` 与 `boards/native_sim.conf` 都必须显式写上 `CONFIG_LV_TXT_ENC_UTF8=y`。
 
 ---
 
@@ -400,7 +414,7 @@ lv_obj_set_style_text_font(label, &lv_font_xxx, LV_PART_MAIN);
 
 | 字体文件 | 字体名称 | 用途 | bpp | 来源 |
 |----------|----------|------|-----|------|
-| `lv_font_cjk.c` | `lv_font_cjk_16` | CJK 中文字体 | 4 | gen_cjk_font.py 生成 |
+| `lv_font_cjk.c` | `lv_font_cjk` | CJK 中文字体（13px，中文模式下的天气行/农历行/日期行） | 4 | gen_cjk_font.py 生成 |
 | `lv_font_segments80.c` | `lv_font_segments80` | 数码管时钟字体 | 4 | bmfont2lvgl.py 转换 |
 | `lv_font_led.c` | `lv_font_led` | 表盘 LED 点阵数值/标签（数值行、倒数第二行 steps） | 1 | gen_led_font_v3.py 生成 + §5.3 手改 |
 | `lv_font_led_small.c` | `lv_font_led_small` | 日期行字体（13px） | 1 | gen_font.py 生成 |

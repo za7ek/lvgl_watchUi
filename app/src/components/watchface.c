@@ -43,7 +43,9 @@ LOG_MODULE_REGISTER(watchface, LOG_LEVEL_INF);
 #define FONT_MOON       &lv_font_montserrat_8
 #define FONT_MOON_IMAGE &lv_font_moon   /* 月相图片字体，20×20px，8 个月相（'0'-'7'） */
 #define FONT_MED        &lv_font_montserrat_12
-#define FONT_CJK        &lv_font_cjk    /* CJK 中文字体，10px，4bpp，用于日期行/天气/农历 */
+/* CJK 中文字体：13px / 4bpp，line_height 与 base_line 同 montserrat_12，
+ * 因此中文行与英文行占用完全相同的垂直空间。用于日期行/天气行/农历行。 */
+#define FONT_CJK        &lv_font_cjk
 #define FONT_LED        &lv_font_led   /* 用于字段数值行 + 倒数第二行steps（LED点阵风格） */
 
 #define LED_DIGIT_W 16    /* adv_w=16px (14px char + 2px gap) */
@@ -64,6 +66,11 @@ LOG_MODULE_REGISTER(watchface, LOG_LEVEL_INF);
 #define LABEL2_W FIELD2_W
 #define LABEL3_W FIELD3_W
 
+/* 日期行：右侧秒数标签占 SECONDS_W，左侧也预留同样宽度，日期在中间剩余区域
+ * 内居中 —— 这样日期的中心与表盘中心重合。中英文使用同一套布局。 */
+#define SECONDS_W 30
+#define DATE_W    (CLOCK_W - 2 * SECONDS_W)
+
 #define BOTTOM5_DIGITS 5
 #define BOTTOM5_W (BOTTOM5_DIGITS * LED_DIGIT_W + (BOTTOM5_DIGITS - 1) * LED_FIELD_GAP)
 
@@ -83,6 +90,13 @@ static int sim_battery = 85;
 
 static int sunrise_hour = 1, sunrise_min = 18;
 static int sunset_hour = 3, sunset_min = 13;
+
+/* 模拟数据是华氏度；中文界面按摄氏度显示（英文界面保持华氏度不变）。 */
+static int fahrenheit_to_celsius(int f)
+{
+    int n = (f - 32) * 5;
+    return (n >= 0) ? (n + 4) / 9 : (n - 4) / 9;   /* 四舍五入，向零截断的补偿 */
+}
 
 static void sim_update_data(void)
 {
@@ -549,19 +563,22 @@ void watchface_start(void)
     lv_obj_set_style_pad_all(bodybatt_bar, 0, LV_PART_MAIN);
     printk("watchface_start: body batt bar created\n");
 
-    /* Date line + seconds — full width matching clock
-     * Row 6: MON, 5 MAY 2025         32
+    /* Date line + seconds
+     * Row 6:      MON, 5 MAY 2025      32
+     * 日期两侧各预留 SECONDS_W（与右侧秒数标签等宽），在剩余区域内居中，
+     * 因此日期的中心正好落在表盘中心，中英文一致。
      * 日期行也使用实体线字体 FONT_DATA = montserrat_12 */
     date_label = lv_label_create(root_page);
     lv_obj_set_style_text_font(date_label, FONT_DATA, LV_PART_MAIN);
     lv_obj_set_style_text_color(date_label, colors->text, LV_PART_MAIN);
-    lv_obj_set_style_text_align(date_label, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
+    lv_obj_set_style_text_align(date_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(date_label, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_outline_width(date_label, 0, LV_PART_MAIN);
     lv_obj_set_style_shadow_width(date_label, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(date_label, 0, LV_PART_MAIN);
-    lv_obj_set_pos(date_label, CLOCK_X, CLOCK_Y + CLOCK_H + 4);
-    lv_obj_set_width(date_label, CLOCK_W);
+    lv_label_set_long_mode(date_label, LV_LABEL_LONG_CLIP);
+    lv_obj_set_pos(date_label, CLOCK_X + SECONDS_W, CLOCK_Y + CLOCK_H + 4);
+    lv_obj_set_width(date_label, DATE_W);
 
     seconds_label = lv_label_create(root_page);
     lv_obj_set_style_text_font(seconds_label, FONT_DATA, LV_PART_MAIN);
@@ -571,8 +588,8 @@ void watchface_start(void)
     lv_obj_set_style_outline_width(seconds_label, 0, LV_PART_MAIN);
     lv_obj_set_style_shadow_width(seconds_label, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(seconds_label, 0, LV_PART_MAIN);
-    lv_obj_set_pos(seconds_label, CLOCK_X + CLOCK_W - 30, CLOCK_Y + CLOCK_H + 4);
-    lv_obj_set_width(seconds_label, 30);
+    lv_obj_set_pos(seconds_label, CLOCK_X + CLOCK_W - SECONDS_W, CLOCK_Y + CLOCK_H + 4);
+    lv_obj_set_width(seconds_label, SECONDS_W);
 
     /* Three data fields: label on top (solid font), LED dot-matrix value below
      * Row 7: RECOVERY HRS:   LAST HR:   WEEK ACT MIN:   （标签 montserrat_8）
@@ -759,26 +776,14 @@ void watchface_update_date(void)
     time_t now = time(NULL);
     localtime_r(&now, &timeinfo);
 
-    /* 日期行：ZH 用 "周X yyyy-MM-dd"，EN 用 "MON, 5 MAY 2025" */
+    /* 日期行：ZH 用 "周X yyyy - MM - dd"，EN 用 "MON, 5 MAY 2025" */
     char date_str[48];
     if (current_lang == LANG_ZH) {
         static const char *zhou[] = {"周日", "周一", "周二", "周三", "周四", "周五", "周六"};
-        snprintf(date_str, sizeof(date_str), "%s %04d-%02d-%02d",
+        snprintf(date_str, sizeof(date_str), "%s %04d - %02d - %02d",
                  zhou[timeinfo.tm_wday],
                  timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday);
         lv_obj_set_style_text_font(date_label, FONT_CJK, LV_PART_MAIN);
-
-        /* DEBUG: test glyph lookup for 周(U+5468) and 日(U+65E5) */
-        {
-            const lv_font_t *cjk = FONT_CJK;
-            lv_font_glyph_dsc_t gd1, gd2;
-            bool ok1 = lv_font_get_glyph_dsc(cjk, &gd1, 0x5468, 0x5468);
-            bool ok2 = lv_font_get_glyph_dsc(cjk, &gd2, 0x65E5, 0x65E5);
-            LOG_INF("[CJK_DEBUG] 周 lookup=%d (w=%d h=%d ofs_y=%d) 日 lookup=%d (w=%d h=%d ofs_y=%d) font=%p line_h=%d",
-                    ok1, gd1.box_w, gd1.box_h, gd1.ofs_y,
-                    ok2, gd2.box_w, gd2.box_h, gd2.ofs_y,
-                    (const void *)cjk, cjk->line_height);
-        }
     } else {
         const char *weekday_str;
         if (timeinfo.tm_wday == 0) {
@@ -793,7 +798,6 @@ void watchface_update_date(void)
         lv_obj_set_style_text_font(date_label, FONT_DATA, LV_PART_MAIN);
     }
     lv_label_set_text(date_label, date_str);
-    LOG_INF("[DATE] %s (wday=%d)", date_str, timeinfo.tm_wday);
 
     /* seconds_label 显示当前时间的秒（0-59），每秒更新 */
     char sec_str[8];
@@ -833,39 +837,43 @@ void watchface_update_weather(void)
     if (!temp_label || !weather_label) return;
 
     if (current_lang == LANG_ZH) {
-        /* 第三行：天气描述 + 温度 */
+        /* 第三行：天气描述 + 摄氏温度区间，如 "多云 15~17℃" */
         char temp_str[32];
-        snprintf(temp_str, sizeof(temp_str), "%s %dF",
-                 locale_get_string(LOCALE_STR_PARTLY_CLOUDY), sim_temp);
+        snprintf(temp_str, sizeof(temp_str), "%s %d~%d℃",
+                 locale_get_string(LOCALE_STR_PARTLY_CLOUDY),
+                 fahrenheit_to_celsius(sim_temp),
+                 fahrenheit_to_celsius(sim_temp_hi));
         lv_obj_set_style_text_font(temp_label, FONT_CJK, LV_PART_MAIN);
         lv_label_set_text(temp_label, temp_str);
-        LOG_INF("[WEATHER] %s (temp=%dF)", temp_str, sim_temp);
+        LOG_INF("[WEATHER] %s", temp_str);
 
-        /* 第四行：农历日期 + 节气 */
+        /* 第四行：干支年 + 农历月日 + 节气，如 "丙午年 六月廿三 +2立秋" */
         struct tm timeinfo;
         time_t now = time(NULL);
         localtime_r(&now, &timeinfo);
         lunar_date_t lunar;
         lunar_calendar_convert(timeinfo.tm_year + 1900, timeinfo.tm_mon + 1,
                                timeinfo.tm_mday, &lunar);
-        char lunar_str[48];
+        char lunar_str[64];
         if (lunar.jieqi[0] != '\0') {
-            snprintf(lunar_str, sizeof(lunar_str), "%s%s %s",
-                     lunar.month_name, lunar.day_name, lunar.jieqi);
+            snprintf(lunar_str, sizeof(lunar_str), "%s %s%s %s",
+                     lunar.year_name, lunar.month_name, lunar.day_name, lunar.jieqi);
         } else {
-            snprintf(lunar_str, sizeof(lunar_str), "%s%s",
-                     lunar.month_name, lunar.day_name);
+            snprintf(lunar_str, sizeof(lunar_str), "%s %s%s",
+                     lunar.year_name, lunar.month_name, lunar.day_name);
         }
         lv_obj_set_style_text_font(weather_label, FONT_CJK, LV_PART_MAIN);
         lv_label_set_text(weather_label, lunar_str);
-        LOG_INF("[LUNAR] %s%s (jieqi='%s') year=%d month=%d day=%d leap=%d",
-                lunar.month_name, lunar.day_name, lunar.jieqi,
-                lunar.year, lunar.month, lunar.day, lunar.leap_month);
+        LOG_INF("[LUNAR] %s (year=%d month=%d day=%d leap=%d)",
+                lunar_str, lunar.year, lunar.month, lunar.day, lunar.leap_month);
     } else {
         char temp_str[32];
-        snprintf(temp_str, sizeof(temp_str), "%dF, +%d, %d%%",
-                 sim_temp, sim_temp_hi - sim_temp, sim_humidity);
-        lv_obj_set_style_text_font(temp_label, FONT_MED, LV_PART_MAIN);
+        snprintf(temp_str, sizeof(temp_str), "%d~%d℃, %d%%",
+                 fahrenheit_to_celsius(sim_temp),
+                 fahrenheit_to_celsius(sim_temp_hi), sim_humidity);
+        /* ℃(U+2103) 不在 montserrat_12 里，会画成空心方框；FONT_CJK 含完整
+         * ASCII 且行高/基线与 montserrat_12 相同，换用它不会影响这一行的布局。 */
+        lv_obj_set_style_text_font(temp_label, FONT_CJK, LV_PART_MAIN);
         lv_label_set_text(temp_label, temp_str);
 
         lv_obj_set_style_text_font(weather_label, FONT_MED, LV_PART_MAIN);
@@ -877,47 +885,49 @@ void watchface_update_weather(void)
 void watchface_update_battery(void)
 {
     if (!battery_fill) return;
+    /* battery_level temporary */
+    {
+        int battery_level = sim_battery;
+        if (battery_level < 0) battery_level = 0;
+        if (battery_level > 100) battery_level = 100;
 
-    int battery_level = sim_battery;
-    if (battery_level < 0) battery_level = 0;
-    if (battery_level > 100) battery_level = 100;
+        /* Fill width proportional to battery level (max 20px inside 24px container) */
+        int fill_w = (battery_level * 20) / 100;
+        if (fill_w < 1 && battery_level > 0) fill_w = 1;
 
-    /* Fill width proportional to battery level (max 20px inside 24px container) */
-    int fill_w = (battery_level * 20) / 100;
-    if (fill_w < 1 && battery_level > 0) fill_w = 1;
+        lv_obj_set_width(battery_fill, fill_w);
 
-    lv_obj_set_width(battery_fill, fill_w);
+        /* Color: red for 1-10%, green for 90-100%, white otherwise */
+        if (battery_level <= 10) {
+            lv_obj_set_style_bg_color(battery_fill, (lv_color_t)LV_COLOR_MAKE(0xff, 0x00, 0x00), LV_PART_MAIN);
+        } else if (battery_level >= 90) {
+            lv_obj_set_style_bg_color(battery_fill, (lv_color_t)LV_COLOR_MAKE(0x00, 0xff, 0x00), LV_PART_MAIN);
+        } else {
+            lv_obj_set_style_bg_color(battery_fill, (lv_color_t)LV_COLOR_MAKE(0xff, 0xff, 0xff), LV_PART_MAIN);
+        }
 
-    /* Color: red for 1-10%, green for 90-100%, white otherwise */
-    if (battery_level <= 10) {
-        lv_obj_set_style_bg_color(battery_fill, (lv_color_t)LV_COLOR_MAKE(0xff, 0x00, 0x00), LV_PART_MAIN);
-    } else if (battery_level >= 90) {
-        lv_obj_set_style_bg_color(battery_fill, (lv_color_t)LV_COLOR_MAKE(0x00, 0xff, 0x00), LV_PART_MAIN);
-    } else {
-        lv_obj_set_style_bg_color(battery_fill, (lv_color_t)LV_COLOR_MAKE(0xff, 0xff, 0xff), LV_PART_MAIN);
-    }
+        /* Always show gray border (including 90-100%) */
+        lv_obj_set_style_border_width(battery_container, 1, LV_PART_MAIN);
 
-    /* Always show gray border (including 90-100%) */
-    lv_obj_set_style_border_width(battery_container, 1, LV_PART_MAIN);
+        /* Percentage display mode: 0=hidden, 1=inside battery, 2=outside battery */
+        char percent_str[4];
+        snprintf(percent_str, sizeof(percent_str), "%d", battery_level);
 
-    /* Percentage display mode: 0=hidden, 1=inside battery, 2=outside battery */
-    char percent_str[4];
-    snprintf(percent_str, sizeof(percent_str), "%d", battery_level);
-
-    if (battery_display_mode == 1) {
-        /* Inside: show label inside battery container */
-        lv_label_set_text(battery_label, percent_str);
-        lv_obj_clear_flag(battery_label, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_add_flag(battery_percent_label, LV_OBJ_FLAG_HIDDEN);
-    } else if (battery_display_mode == 2) {
-        /* Outside: show label to the right of battery */
-        lv_label_set_text(battery_percent_label, percent_str);
-        lv_obj_clear_flag(battery_percent_label, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_add_flag(battery_label, LV_OBJ_FLAG_HIDDEN);
-    } else {
-        /* Hidden */
-        lv_obj_add_flag(battery_label, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_add_flag(battery_percent_label, LV_OBJ_FLAG_HIDDEN);
+        if (battery_display_mode == 1) {
+            /* Inside: show label inside battery container */
+            lv_label_set_text(battery_label, percent_str);
+            lv_obj_clear_flag(battery_label, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(battery_percent_label, LV_OBJ_FLAG_HIDDEN);
+        } else if (battery_display_mode == 2) {
+            /* Outside: show label to the right of battery */
+            lv_label_set_text(battery_percent_label, percent_str);
+            lv_obj_clear_flag(battery_percent_label, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(battery_label, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            /* Hidden */
+            lv_obj_add_flag(battery_label, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_add_flag(battery_percent_label, LV_OBJ_FLAG_HIDDEN);
+        }
     }
 }
 
