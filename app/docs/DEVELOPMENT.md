@@ -390,7 +390,39 @@ python3 generate_font.py
 
 **注意**：需要安装 `lv_font_conv` 和 `NotoSansSC-Regular.otf` 字体文件。
 
-### 7.4 调试技巧
+### 7.4 圆形可视区校核
+
+GC9A01 是圆屏：帧缓冲 240×240 是方的，但只有以 (119.5, 119.5) 为心、R=120 的圆内
+能看见，四角物理上不存在。`watchface.c` 里 `SAFE_R = 117`（离屏边留 3px 给表壳），
+**任何一个绘制像素到圆心的距离都不许超过它**。
+
+判据是元素的**四个角**，不是宽度——同样宽的一行，越靠近上下边缘越容易被切。
+一行内容宽 W、最低一行在 y，则要求 `hypot(W/2, |y - 119.5|) ≤ SAFE_R`。
+
+改完布局别靠眼睛看，抓帧算：
+
+```bash
+# 1) 给 main.c 临时加一个 lv_snapshot_take() → PPM 的转储函数，在 lv_timer_handler()
+#    跑够几十轮后调用一次；额外配置 CONFIG_LV_USE_SNAPSHOT=y 和
+#    CONFIG_LV_Z_MEM_POOL_SIZE=524288（快照要一整屏 ARGB8888 缓冲）。
+west build -b native_sim/native/64 -d ../native_snap ../lgvl_watchUi/app \
+    -- -DEXTRA_CONF_FILE=/tmp/snap.conf
+./../native_snap/zephyr/zephyr.exe
+
+# 2) 对每个非背景像素算到圆心的距离，取最大值
+python3 - <<'EOF'
+from PIL import Image
+import math
+im = Image.open('/tmp/ui_zh.ppm').convert('RGB'); px = im.load(); bg = px[0, 0]
+worst = max((math.hypot(x - 119.5, y - 119.5), (x, y))
+            for y in range(240) for x in range(240) if px[x, y] != bg)
+print('worst needR = %.1f at %s' % worst)
+EOF
+```
+
+中英文各抓一张：中文行（农历/日期）比英文宽，两边都要过。
+
+### 7.5 调试技巧
 
 ```bash
 # 启用详细日志

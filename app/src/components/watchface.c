@@ -23,10 +23,42 @@ LOG_MODULE_REGISTER(watchface, LOG_LEVEL_INF);
 #define SCREEN_H 240
 #define CENTER_X 120
 
-#define CLOCK_W 220
+/* ---------------------------------------------------------------------------
+ * 圆形可视区
+ *
+ * GC9A01 是 240×240 的圆屏：帧缓冲是方的，但只有以 (119.5, 119.5) 为心、
+ * R=120 的圆内能看见，四角是物理上不存在的。表壳还会再压掉一两个像素，
+ * 所以布局按 SAFE_R = 117（离屏边 3px）收：任何一个绘制像素到圆心的距离
+ * 都不许超过它。判据是"元素四角"，不是"元素宽度"——同样宽的一行，越靠近
+ * 上下边缘越容易被切。
+ *
+ * 校核方法见 docs/DEVELOPMENT.md：用 native_sim 抓帧，对每个非背景像素算
+ * hypot(x-119.5, y-119.5) 取最大值。
+ * ------------------------------------------------------------------------- */
+#define SAFE_R 117
+
+/* 时钟块：4 个 42px 数字列 + 1 个窄冒号列。冒号本来就不需要一个数字那么宽，
+ * 收窄它把整块从 218px 压到 194px —— 上两角的所需半径从 123.7 降到 113.8，
+ * 这是把时钟塞进圆里代价最小的一刀（不用改 42×80 的字体，也不用下移）。 */
+#define COL_W    42
+#define COL_GAP  2
+#define COLON_W  18
+#define COL_TOTAL (4 * COL_W + COLON_W + 4 * COL_GAP)   /* 194 */
+
+#define CLOCK_W COL_TOTAL
 #define CLOCK_H 80
-#define CLOCK_X 10
+#define CLOCK_X (CENTER_X - CLOCK_W / 2)   /* 23 */
 #define CLOCK_Y 60
+
+/* 列在时钟块内的 x 偏移 */
+#define COL_X_H1    0
+#define COL_X_H2    (COL_X_H1 + COL_W + COL_GAP)
+#define COL_X_COLON (COL_X_H2 + COL_W + COL_GAP)
+#define COL_X_M1    (COL_X_COLON + COLON_W + COL_GAP)
+#define COL_X_M2    (COL_X_M1 + COL_W + COL_GAP)
+
+/* 月相 20×20 图片的左上角 Y。文字模式另有一套坐标（见 watchface_update_date）。 */
+#define MOON_Y 10
 
 /* 实体线字体（Montserrat系列）替代点阵LED字体
  * 第一行标签、字段标签：FONT_LABEL = montserrat_8（比时间行更小）
@@ -47,20 +79,27 @@ LOG_MODULE_REGISTER(watchface, LOG_LEVEL_INF);
 #define LED_DIGIT_W 16    /* adv_w=16px (14px char + 2px gap) */
 #define LED_DIGIT_H 20    /* 2x2 blocks, 1px gaps → 20px tall */
 #define LED_FIELD_GAP 0   /* no extra gap; spacing is in adv_w */
-#define FIELD1_DIGITS 4
-#define FIELD2_DIGITS 4
-#define FIELD3_DIGITS 4
 
-/* Matrix (digit field) width: DIGITS*ADV_W
- * FIELD_W = 4*16 = 64px, matches label text width */
+/* 三个数值字段每个 3 格。原来是 4 格：3*4*16 = 192px 宽的一行落在 y=173..192，
+ * 那里圆的可用宽度只有 183px（SAFE_R=117 时），左右两个字段各被切掉约 8px ——
+ * 而且这行再怎么挪也躲不开，它已经在时钟和步数之间唯一的空档里。
+ * 3 格够用：RECOVERY "5.0"、LAST HR 三位、WEEK ACT MIN 三位；超出量程时
+ * led_field_set_value() 会先丢小数、再退化成全 9，不会显示成截断后的错数。 */
+#define FIELD1_DIGITS 3
+#define FIELD2_DIGITS 3
+#define FIELD3_DIGITS 3
+
+/* Matrix (digit field) width: DIGITS*ADV_W = 3*16 = 48px */
 #define FIELD1_W (FIELD1_DIGITS * LED_DIGIT_W)
 #define FIELD2_W (FIELD2_DIGITS * LED_DIGIT_W)
 #define FIELD3_W (FIELD3_DIGITS * LED_DIGIT_W)
 
-/* Label width: same as matrix width for left-aligned layout */
-#define LABEL1_W FIELD1_W
-#define LABEL2_W FIELD2_W
-#define LABEL3_W FIELD3_W
+/* 字段间距。标签（"RECOVERY HRS:" 约 52px）比 48px 的点阵宽，所以标签宽度
+ * 单独给到 = 点阵宽 + 间距，正好铺满一个字段的步进，不会被 CLIP 截掉。 */
+#define FIELD_GAP 16
+#define LABEL1_W (FIELD1_W + FIELD_GAP)
+#define LABEL2_W (FIELD2_W + FIELD_GAP)
+#define LABEL3_W (FIELD3_W + FIELD_GAP)
 
 /* 日期行：右侧秒数标签占 SECONDS_W，左侧也预留同样宽度，日期在中间剩余区域
  * 内居中 —— 这样日期的中心与表盘中心重合。中英文使用同一套布局。 */
@@ -69,6 +108,37 @@ LOG_MODULE_REGISTER(watchface, LOG_LEVEL_INF);
 
 #define BOTTOM5_DIGITS 5
 #define BOTTOM5_W (BOTTOM5_DIGITS * LED_DIGIT_W + (BOTTOM5_DIGITS - 1) * LED_FIELD_GAP)
+
+/* 三字段行的几何。总宽 3*48 + 2*16 = 176，居中 → x = 32..207；
+ * 数值行 y = 173..192，最低一行所需半径 hypot(87.5, 72.5) = 113.6。 */
+#define FIELD_ROW_W  (3 * FIELD1_W + 2 * FIELD_GAP)
+#define FIELD_X0     (CENTER_X - FIELD_ROW_W / 2)
+#define FIELD_TOP    (CLOCK_Y + CLOCK_H + 20)
+#define FIELD_LABEL_H 10
+#define FIELD_VAL_Y  (FIELD_TOP + FIELD_LABEL_H + 3)
+
+/* ---------------------------------------------------------------------------
+ * 圆形可视区的编译期校核
+ *
+ * 全部按 2 倍坐标算，避开圆心 (119.5, 119.5) 的半像素：2*119.5 = 239。
+ * 一个宽 w、纵向 y0..y1 的居中矩形，四角里最远的那个满足
+ *     w² + max(|2*y0-239|, |2*y1-239|)² ≤ (2*SAFE_R)²
+ * 就在安全圆内。改了列宽、CLOCK_Y 或字段行位置而越界的话，这里直接编译不过。
+ * ------------------------------------------------------------------------- */
+#define DY2(y)          ((2 * (y) - 239) < 0 ? (239 - 2 * (y)) : (2 * (y) - 239))
+#define DY2_MAX(y0, y1) (DY2(y0) > DY2(y1) ? DY2(y0) : DY2(y1))
+#define FITS_IN_SAFE_CIRCLE(w, y0, y1) \
+    ((w) * (w) + DY2_MAX(y0, y1) * DY2_MAX(y0, y1) <= (2 * SAFE_R) * (2 * SAFE_R))
+
+/* 三字段行的 x 布局只用了 FIELD1_W 一个宽度，三个字段必须等宽 */
+BUILD_ASSERT(FIELD1_W == FIELD2_W && FIELD2_W == FIELD3_W,
+             "data fields must be equal width: FIELD1/2/3_DIGITS must match");
+BUILD_ASSERT(FITS_IN_SAFE_CIRCLE(CLOCK_W, CLOCK_Y, CLOCK_Y + CLOCK_H - 1),
+             "clock block corners fall outside the round display; "
+             "narrow COL_W/COLON_W/COL_GAP or move CLOCK_Y toward the center");
+BUILD_ASSERT(FITS_IN_SAFE_CIRCLE(FIELD_ROW_W, FIELD_VAL_Y, FIELD_VAL_Y + LED_DIGIT_H - 1),
+             "data field row corners fall outside the round display; "
+             "reduce FIELD*_DIGITS or FIELD_GAP");
 
 #define LED_BG_COLOR  ((lv_color_t)LV_COLOR_MAKE(0x08, 0x30, 0x39))
 #define LED_FG_COLOR  ((lv_color_t)LV_COLOR_MAKE(0xff, 0xff, 0xff))
@@ -241,11 +311,9 @@ static lv_timer_t *sensor_timer = NULL;
  *   Outside digit segments → dark green + black grid/dots (dark green shows through grid gaps)
  *   Grid lines & dots everywhere → black (topmost layer) */
 
-/* Column layout: 5 equal columns of 42px with 2px gaps
- * total = 5*42 + 4*2 = 218px, centered in 220px clock width → x offset 1 */
-#define COL_W 42
-#define COL_GAP 2
-#define COL_TOTAL (5 * COL_W + 4 * COL_GAP)
+/* 列宽/列偏移见文件头 COL_* —— 冒号列比数字列窄，为了收进圆形可视区。
+ * 窄列里的 42px 字形（'#' 网格、':'）走 CENTER + LV_LABEL_LONG_CLIP，
+ * 等于居中裁切：网格是均匀重复的，冒号两点也在正中，裁掉的都是空边。 */
 
 static lv_obj_t *clock_col_create(lv_obj_t *parent, lv_coord_t x, lv_coord_t w,
                                    const theme_colors_t *colors, const char *grid_char,
@@ -359,11 +427,19 @@ static void led_field_set_value(lv_obj_t **bg_labels, lv_obj_t **val_labels,
 
     if (decimals == 1) {
         snprintf(src_buf, sizeof(src_buf), "%.1f", (double)value);
-        total_chars = strlen(src_buf);
+        /* 格数不够就先丢小数（12.5 → "12"）。不这么做的话下面的右对齐
+         * 会把最高位截掉，"12.5" 在 3 格里显示成 "2.5" —— 错得看不出来。 */
+        if ((int)strlen(src_buf) > digits) {
+            snprintf(src_buf, sizeof(src_buf), "%d", (int)value);
+        }
     } else {
         snprintf(src_buf, sizeof(src_buf), "%d", (int)value);
-        total_chars = strlen(src_buf);
     }
+    if ((int)strlen(src_buf) > digits) {
+        memset(src_buf, '9', (size_t)digits);   /* 整数位都放不下：显示满量程 */
+        src_buf[digits] = '\0';
+    }
+    total_chars = strlen(src_buf);
 
     /* 每格由两层组成，只有颜色和 val 的字符随取值变化：
      *   空位   bg='#' 暗绿（点阵底纹）          val=' '  —— 什么都不显示
@@ -503,7 +579,7 @@ void watchface_start(void)
     lv_obj_set_style_outline_width(dawn_label, 0, LV_PART_MAIN);
     lv_obj_set_style_shadow_width(dawn_label, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(dawn_label, 0, LV_PART_MAIN);
-    lv_obj_set_pos(dawn_label, 64, 8);
+    lv_obj_set_pos(dawn_label, 64, 11);
     lv_obj_set_width(dawn_label, 40);
 
     dawn_time_label = lv_label_create(root_page);
@@ -514,7 +590,7 @@ void watchface_start(void)
     lv_obj_set_style_outline_width(dawn_time_label, 0, LV_PART_MAIN);
     lv_obj_set_style_shadow_width(dawn_time_label, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(dawn_time_label, 0, LV_PART_MAIN);
-    lv_obj_set_pos(dawn_time_label, 64, 16);
+    lv_obj_set_pos(dawn_time_label, 64, 19);
     lv_obj_set_width(dawn_time_label, 40);
 
     moon_label = lv_label_create(root_page);
@@ -528,7 +604,7 @@ void watchface_start(void)
     lv_obj_set_style_outline_width(moon_label, 0, LV_PART_MAIN);
     lv_obj_set_style_shadow_width(moon_label, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(moon_label, 0, LV_PART_MAIN);
-    lv_obj_set_pos(moon_label, CENTER_X - 10, 7);
+    lv_obj_set_pos(moon_label, CENTER_X - 10, MOON_Y);
     lv_obj_set_width(moon_label, 20);
     lv_label_set_long_mode(moon_label, LV_LABEL_LONG_CLIP);   /* 强制单行不换行 */
 
@@ -540,7 +616,7 @@ void watchface_start(void)
     lv_obj_set_style_outline_width(dusk_label, 0, LV_PART_MAIN);
     lv_obj_set_style_shadow_width(dusk_label, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(dusk_label, 0, LV_PART_MAIN);
-    lv_obj_set_pos(dusk_label, 136, 8);
+    lv_obj_set_pos(dusk_label, 136, 11);
     lv_obj_set_width(dusk_label, 40);
 
     dusk_time_label = lv_label_create(root_page);
@@ -551,7 +627,7 @@ void watchface_start(void)
     lv_obj_set_style_outline_width(dusk_time_label, 0, LV_PART_MAIN);
     lv_obj_set_style_shadow_width(dusk_time_label, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(dusk_time_label, 0, LV_PART_MAIN);
-    lv_obj_set_pos(dusk_time_label, 136, 16);
+    lv_obj_set_pos(dusk_time_label, 136, 19);
     lv_obj_set_width(dusk_time_label, 40);
 
     /* Weather: temp line + description line
@@ -585,17 +661,16 @@ void watchface_start(void)
     lv_obj_set_style_pad_all(clock_bg, 0, LV_PART_MAIN);
     lv_obj_set_style_radius(clock_bg, 0, LV_PART_MAIN);
 
-    /* 5 equal columns: 42px wide, 2px gap, total = 218px, centered in 220px */
-    lv_coord_t col_x0 = (CLOCK_W - COL_TOTAL) / 2;
-    clock_col_h1 = clock_col_create(clock_bg, col_x0 + 0 * (COL_W + COL_GAP), COL_W,
+    /* 4 个 42px 数字列 + 中间 18px 冒号列，总宽 COL_TOTAL 即 CLOCK_W */
+    clock_col_h1 = clock_col_create(clock_bg, COL_X_H1, COL_W,
                      colors, "#", &clock_lbl_digit_h1, &clock_lbl_grid_h1);
-    clock_col_h2 = clock_col_create(clock_bg, col_x0 + 1 * (COL_W + COL_GAP), COL_W,
+    clock_col_h2 = clock_col_create(clock_bg, COL_X_H2, COL_W,
                      colors, "#", &clock_lbl_digit_h2, &clock_lbl_grid_h2);
-    clock_col_colon = clock_col_create(clock_bg, col_x0 + 2 * (COL_W + COL_GAP), COL_W,
+    clock_col_colon = clock_col_create(clock_bg, COL_X_COLON, COLON_W,
                      colors, "#", &clock_lbl_digit_colon, &clock_lbl_grid_colon);
-    clock_col_m1 = clock_col_create(clock_bg, col_x0 + 3 * (COL_W + COL_GAP), COL_W,
+    clock_col_m1 = clock_col_create(clock_bg, COL_X_M1, COL_W,
                      colors, "#", &clock_lbl_digit_m1, &clock_lbl_grid_m1);
-    clock_col_m2 = clock_col_create(clock_bg, col_x0 + 4 * (COL_W + COL_GAP), COL_W,
+    clock_col_m2 = clock_col_create(clock_bg, COL_X_M2, COL_W,
                      colors, "#", &clock_lbl_digit_m2, &clock_lbl_grid_m2);
 
     /* Initial digit text */
@@ -611,7 +686,7 @@ void watchface_start(void)
     int stress_h = (CLOCK_H * sim_stress) / 100;
     if (stress_h < 2) stress_h = 2;
     lv_obj_set_size(stress_bar, 3, stress_h);
-    lv_obj_set_pos(stress_bar, CLOCK_X - 5, CLOCK_Y + CLOCK_H - stress_h);
+    lv_obj_set_pos(stress_bar, CLOCK_X - 4, CLOCK_Y + CLOCK_H - stress_h);
     lv_obj_set_style_bg_color(stress_bar, colors->stress, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(stress_bar, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_width(stress_bar, 0, LV_PART_MAIN);
@@ -624,7 +699,7 @@ void watchface_start(void)
     int bodybatt_h = (CLOCK_H * sim_bodybatt) / 100;
     if (bodybatt_h < 2) bodybatt_h = 2;
     lv_obj_set_size(bodybatt_bar, 3, bodybatt_h);
-    lv_obj_set_pos(bodybatt_bar, CLOCK_X + CLOCK_W + 2, CLOCK_Y + CLOCK_H - bodybatt_h);
+    lv_obj_set_pos(bodybatt_bar, CLOCK_X + CLOCK_W + 1, CLOCK_Y + CLOCK_H - bodybatt_h);
     lv_obj_set_style_bg_color(bodybatt_bar, colors->bodybatt, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(bodybatt_bar, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_border_width(bodybatt_bar, 0, LV_PART_MAIN);
@@ -663,16 +738,11 @@ void watchface_start(void)
     /* Three data fields: label on top (solid font), LED dot-matrix value below
      * Row 7: RECOVERY HRS:   LAST HR:   WEEK ACT MIN:   （标签 montserrat_8）
      * Row 8:     5.0           80           0             （数值 LED 点阵风格） */
-    int field_top = CLOCK_Y + CLOCK_H + 20;
+    int field_top = FIELD_TOP;
     int field_h = LED_DIGIT_H;
-    int label_h = 10;
-    int field_gap = 10;  /* 字段间间距：10像素 */
-    int total_field_w = 3 * LABEL1_W + 2 * field_gap;
-    int field_start_x = CENTER_X - total_field_w / 2;
-
-    int field1_x = field_start_x;
-    int field2_x = field_start_x + LABEL1_W + field_gap;
-    int field3_x = field_start_x + 2 * (LABEL1_W + field_gap);
+    int field1_x = FIELD_X0;
+    int field2_x = FIELD_X0 + FIELD1_W + FIELD_GAP;
+    int field3_x = FIELD_X0 + 2 * (FIELD1_W + FIELD_GAP);
 
     /* ========= Field 1: RECOVERY HRS ========= */
     field1_label = lv_label_create(root_page);
@@ -687,7 +757,7 @@ void watchface_start(void)
     lv_obj_set_pos(field1_label, field1_x, field_top);
     lv_obj_set_width(field1_label, LABEL1_W);
 
-    led_field_create(root_page, field1_x, field_top + label_h + 3, FIELD1_W, field_h, FIELD1_DIGITS, field1_bg_labels, field1_val_labels);
+    led_field_create(root_page, field1_x, FIELD_VAL_Y, FIELD1_W, field_h, FIELD1_DIGITS, field1_bg_labels, field1_val_labels);
 
     /* ========= Field 2: LAST HR ========= */
     field2_label = lv_label_create(root_page);
@@ -702,7 +772,7 @@ void watchface_start(void)
     lv_obj_set_pos(field2_label, field2_x, field_top);
     lv_obj_set_width(field2_label, LABEL2_W);
 
-    led_field_create(root_page, field2_x, field_top + label_h + 3, FIELD2_W, field_h, FIELD2_DIGITS, field2_bg_labels, field2_val_labels);
+    led_field_create(root_page, field2_x, FIELD_VAL_Y, FIELD2_W, field_h, FIELD2_DIGITS, field2_bg_labels, field2_val_labels);
 
     /* ========= Field 3: WEEK ACT MIN ========= */
     field3_label = lv_label_create(root_page);
@@ -717,12 +787,12 @@ void watchface_start(void)
     lv_obj_set_pos(field3_label, field3_x, field_top);
     lv_obj_set_width(field3_label, LABEL3_W);
 
-    led_field_create(root_page, field3_x, field_top + label_h + 3, FIELD3_W, field_h, FIELD3_DIGITS, field3_bg_labels, field3_val_labels);
+    led_field_create(root_page, field3_x, FIELD_VAL_Y, FIELD3_W, field_h, FIELD3_DIGITS, field3_bg_labels, field3_val_labels);
     printk("watchface_start: fields created\n");
 
     /* Bottom: icon + 5-digit steps (LED font) + icon
      * Row 9:  ♥   0 8 5 7 3   🔥   */
-    int bottom_y = field_top + label_h + 3 + field_h + 5;
+    int bottom_y = FIELD_VAL_Y + field_h + 5;
     printk("watchface_start: creating heart icon\n");
     icon_draw(root_page, ICON_HEART, 30, bottom_y + 2, colors->heart_rate);
     printk("watchface_start: heart icon created\n");
@@ -898,13 +968,19 @@ void watchface_update_date(void)
     if (moon_display_mode == 0) {
         lv_obj_set_style_text_font(moon_label, FONT_MOON, LV_PART_MAIN);
         lv_obj_set_width(moon_label, 32);
-        lv_obj_set_pos(moon_label, CENTER_X - 16, 13);
+        lv_obj_set_pos(moon_label, CENTER_X - 16, MOON_Y + 6);
         label_set_text(moon_label, get_moon_string(moon_phase));
     } else {
+        /* 5 月 4 日（May the Fourth be with you）画死星，字形 '8'。
+         * 同 Segment34.CN moonPhase() 里的彩蛋：
+         *     if(time.month == 5 and time.day == 4) { return "8"; // That's no moon!
+         * 只在图片模式生效——文字模式没有对应的词，仍显示当天真实月相。 */
+        bool death_star = (timeinfo.tm_mon + 1 == 5 && timeinfo.tm_mday == 4);
+
         lv_obj_set_style_text_font(moon_label, FONT_MOON_IMAGE, LV_PART_MAIN);
         lv_obj_set_width(moon_label, 20);
-        lv_obj_set_pos(moon_label, CENTER_X - 10, 7);
-        char moon_char[2] = { (char)('0' + moon_phase), '\0' };
+        lv_obj_set_pos(moon_label, CENTER_X - 10, MOON_Y);
+        char moon_char[2] = { (char)('0' + (death_star ? 8 : moon_phase)), '\0' };
         label_set_text(moon_label, moon_char);
     }
 }
