@@ -422,7 +422,43 @@ EOF
 
 中英文各抓一张：中文行（农历/日期）比英文宽，两边都要过。
 
-### 7.5 调试技巧
+### 7.5 底部状态图标
+
+倒数第二行（步数点阵）左右各有一个图标位。每个位置**选一种指示器**，具体画哪个字形
+——或者什么都不画——由状态决定。这套结构照搬 Segment34 的 `icon1`/`icon2` 设置项和
+`getIconState()`。
+
+| 指示器 | 显示条件 | 字形 |
+|--------|----------|------|
+| `ICON_SLOT_ALARM` | 闹钟数 > 0 | `A` 闹钟 |
+| `ICON_SLOT_DND` | 勿扰开启 | `D` 月亮+Zz |
+| `ICON_SLOT_BLUETOOTH` | 始终显示 | `L` 蓝牙符文（断开时画暗色） |
+| `ICON_SLOT_BLUETOOTH_OFF` | 仅断开时显示 | 同上 |
+| `ICON_SLOT_MOVE_BAR` | 久坐等级 1-5 | `N` `O` `P` `Q` `R` |
+| `ICON_SLOT_NONE` | 从不显示 | — |
+
+```c
+watchface_set_icon_slots(ICON_SLOT_ALARM, ICON_SLOT_BLUETOOTH);
+
+/* 状态输入。目前是模拟值，接真实数据源时从 RTC 闹钟表 / BLE 连接回调 /
+ * 活动监测里调这几个函数即可，渲染侧不用动。 */
+watchface_set_alarm_count(1);
+watchface_set_dnd(false);
+watchface_set_phone_connected(true);
+watchface_set_move_bar_level(0);
+```
+
+**蓝牙断开为什么不是独立字形**：参考图集里确实有个 `M`，但它和 `L` 逐像素完全相同，
+区别只是整个符文画成 85/255 的灰度（整张 `icons.png` 只有 0/85/255 三级）。1bpp 字体
+装不下这个区别，所以 `M` 不收进字体，断开状态改用同一个 `L` 配 `lv_color_mix(notif,
+bg, 85)` 的暗色 —— 显示效果与参考一致。`tools/gen_font.py` 现在会对"阈值后全空但源图
+有像素"的字形报警告，就是为了下次再遇到这种灰度字形不至于悄无声息地生成一个空白图标。
+
+图标位在整块表盘最靠下的位置，**外侧下角是最容易被圆切掉的地方**（见 7.4）。
+`ICON_GAP` 是往里收的间隙，加大它会把图标推向外侧、更容易越界，别搞反。
+`watchface.c` 里有对应的 `BUILD_ASSERT`。
+
+### 7.6 调试技巧
 
 ```bash
 # 启用详细日志

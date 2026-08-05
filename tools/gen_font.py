@@ -229,6 +229,19 @@ def main():
         else:
             data = bitmap_to_lvgl_1bpp(bitmap, box_w, box_h)
             lvgl_ofs_y = target_h - box_h - yoff
+
+            # 1 bpp 只能"开"或"关"，阈值取的是 128（≥50% 覆盖才算前景）。图集里
+            # 如果有整个字形都画在中间灰度的（Segment34 的 icons.png 就用 85 的灰
+            # 度画"蓝牙断开"，形状和"已连接"一模一样，只是暗一档），阈值会把它整
+            # 个抹掉，生成的字形一个点都没有，运行时表现为"图标不显示"——不报出来
+            # 根本查不到这儿。源区域有像素但结果全空，一定要喊。
+            if not any(0 in row for row in bitmap):
+                src = img.convert('L').crop((info['x'], info['y'],
+                                             info['x'] + box_w, info['y'] + box_h))
+                peak = max(src.getdata()) if box_w and box_h else 0
+                if peak > 0:
+                    print(f"  WARNING: char '{name}' (id={cid}) 阈值后全空，"
+                          f"源图该区域最亮只有 {peak}/255 —— 这个字形画出来是空白的")
         
         glyph_dsc = {
             'bitmap_index': len(bitmap_data),

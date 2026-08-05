@@ -6,7 +6,6 @@ project(segment34_watch)
 target_sources(app PRIVATE
     src/main.c
     src/components/watchface.c
-    src/components/icons.c
     src/components/lunar_calendar.c
     src/locale/locale.c
     src/theme/theme.c
@@ -15,6 +14,7 @@ target_sources(app PRIVATE
     src/fonts/lv_font_led.c
     src/fonts/lv_font_xsmol.c
     src/fonts/lv_font_moon.c
+    src/fonts/lv_font_icons.c
 )
 
 target_include_directories(app PRIVATE

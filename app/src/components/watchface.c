@@ -3,7 +3,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include "watchface.h"
-#include "icons.h"
 #include "lunar_calendar.h"
 #include "locale.h"
 #include "theme.h"
@@ -12,6 +11,7 @@
 #include "lv_font_led.h"
 #include "lv_font_xsmol.h"
 #include "lv_font_moon.h"
+#include "lv_font_icons.h"
 #include <lvgl.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
@@ -75,6 +75,7 @@ LOG_MODULE_REGISTER(watchface, LOG_LEVEL_INF);
  * 因此中文行与英文行占用完全相同的垂直空间。用于日期行/天气行/农历行。 */
 #define FONT_CJK        &lv_font_cjk
 #define FONT_LED        &lv_font_led   /* 用于字段数值行 + 倒数第二行steps（LED点阵风格） */
+#define FONT_ICONS      &lv_font_icons /* 状态图标：闹钟/勿扰/蓝牙/久坐提醒，21px */
 
 #define LED_DIGIT_W 16    /* adv_w=16px (14px char + 2px gap) */
 #define LED_DIGIT_H 20    /* 2x2 blocks, 1px gaps → 20px tall */
@@ -117,6 +118,19 @@ LOG_MODULE_REGISTER(watchface, LOG_LEVEL_INF);
 #define FIELD_LABEL_H 10
 #define FIELD_VAL_Y  (FIELD_TOP + FIELD_LABEL_H + 3)
 
+/* 倒数第二行：步数点阵居中，左右各一个状态图标位。
+ * 图标 21px 高、点阵 20px 高，图标上移 1px 与点阵在视觉上对齐。
+ * ICON_GAP 是往里收的间隙 —— 这一行已经很靠下，间隙越大图标越往外、
+ * 越容易顶到表圈，所以只留 2px。 */
+#define BOTTOM_ROW_Y (FIELD_VAL_Y + LED_DIGIT_H + 5)
+#define BOTTOM5_X    (CENTER_X - BOTTOM5_W / 2)
+#define ICON_W       22   /* 最宽的字形 'A' 是 21px，adv_w 19px，居中留 1px 余量 */
+#define ICON_H       21
+#define ICON_GAP     2
+#define ICON_Y       (BOTTOM_ROW_Y - 1)
+#define ICON_X_LEFT  (BOTTOM5_X - ICON_GAP - ICON_W)
+#define ICON_X_RIGHT (BOTTOM5_X + BOTTOM5_W + ICON_GAP)
+
 /* ---------------------------------------------------------------------------
  * 圆形可视区的编译期校核
  *
@@ -139,6 +153,11 @@ BUILD_ASSERT(FITS_IN_SAFE_CIRCLE(CLOCK_W, CLOCK_Y, CLOCK_Y + CLOCK_H - 1),
 BUILD_ASSERT(FITS_IN_SAFE_CIRCLE(FIELD_ROW_W, FIELD_VAL_Y, FIELD_VAL_Y + LED_DIGIT_H - 1),
              "data field row corners fall outside the round display; "
              "reduce FIELD*_DIGITS or FIELD_GAP");
+/* 图标位在最靠下的一行，外侧下角是整块表盘最容易被切的地方之一 */
+BUILD_ASSERT(FITS_IN_SAFE_CIRCLE(2 * (CENTER_X - ICON_X_LEFT), ICON_Y, ICON_Y + ICON_H - 1),
+             "left status icon falls outside the round display; reduce ICON_GAP/ICON_W");
+BUILD_ASSERT(FITS_IN_SAFE_CIRCLE(2 * (ICON_X_RIGHT + ICON_W - CENTER_X), ICON_Y, ICON_Y + ICON_H - 1),
+             "right status icon falls outside the round display; reduce ICON_GAP/ICON_W");
 
 #define LED_BG_COLOR  ((lv_color_t)LV_COLOR_MAKE(0x08, 0x30, 0x39))
 #define LED_FG_COLOR  ((lv_color_t)LV_COLOR_MAKE(0xff, 0xff, 0xff))
@@ -156,6 +175,19 @@ static int sim_week_min = 0;
 static int sim_stress = 45;
 static int sim_bodybatt = 68;
 static int sim_battery = 85;
+
+/* 状态图标的输入。真机上这些应该来自 RTC 闹钟表、BLE 连接回调和活动监测，
+ * 目前没有对应子系统，先给一组默认值，改由 watchface_set_*() 从外部驱动。 */
+static int  state_alarm_count = 1;
+static bool state_dnd = false;
+static bool state_phone_connected = true;
+static int  state_move_bar = 0;          /* 0-5 */
+
+/* 两个图标位显示什么。参考实现的默认是 icon1=闹钟、icon2=仅断开时显示蓝牙；
+ * 这里右边用"连/断都显示"，否则手机连着的时候右边一直是空的，看不出这套
+ * 逻辑在工作。要跟参考完全一致就把右边设成 ICON_SLOT_BLUETOOTH_OFF。 */
+static icon_slot_t icon_slot_left  = ICON_SLOT_ALARM;
+static icon_slot_t icon_slot_right = ICON_SLOT_BLUETOOTH;
 
 static int sunrise_hour = 1, sunrise_min = 18;
 static int sunset_hour = 3, sunset_min = 13;
@@ -208,6 +240,42 @@ static void watchface_invalidate_cache(void)
     weather_next_refresh = 0;
 }
 
+/* 图标位 → 字形。同 Segment34 的 getIconState()：一个位置选一种指示器，
+ * 画哪个字形由状态决定，条件不满足就返回空串（label 什么都不画）。
+ * 字形出自 lv_font_icons：A=闹钟 D=勿扰 L=蓝牙 N..R=久坐提醒 1-5 级。
+ *
+ * 蓝牙断开在参考实现里是字形 'M'，但那个字形和 'L' 逐像素完全相同，区别只在
+ * 整个符文画成 85/255 的灰度 —— 也就是"同一个图标，暗一档"。1bpp 字体里表达
+ * 不了灰度，所以 'M' 干脆不收进字体（收了就是个空白字形，见 gen_font.py 的
+ * 告警），断开状态改成同一个 'L' 配暗色，最终显示效果与参考一致。 */
+static const char *icon_slot_glyph(icon_slot_t slot)
+{
+    switch (slot) {
+    case ICON_SLOT_ALARM:
+        return (state_alarm_count > 0) ? "A" : "";
+    case ICON_SLOT_DND:
+        return state_dnd ? "D" : "";
+    case ICON_SLOT_BLUETOOTH:
+        return "L";
+    case ICON_SLOT_BLUETOOTH_OFF:
+        return state_phone_connected ? "" : "L";
+    case ICON_SLOT_MOVE_BAR:
+        if (state_move_bar <= 0) return "";
+        if (state_move_bar >= 5) return "R";
+        return (const char *[]){ "N", "O", "P", "Q" }[state_move_bar - 1];
+    case ICON_SLOT_NONE:
+    default:
+        return "";
+    }
+}
+
+/* 只有蓝牙断开要画暗色，其余状态都是常规亮度 */
+static bool icon_slot_dimmed(icon_slot_t slot)
+{
+    return (slot == ICON_SLOT_BLUETOOTH || slot == ICON_SLOT_BLUETOOTH_OFF)
+           && !state_phone_connected;
+}
+
 /* 风向箭头。同 Segment34 的 getWind()：
  *     bearing = ((Math.round((windBearing + 180) / 45.0) % 8) + 97).toChar()
  * 把风向量化成 8 个方位，映射到它 LED 字体里 'a'-'h' 这 8 个箭头字形。
@@ -253,6 +321,13 @@ static void sim_update_weather(void)
     sim_wind_mps = rand() % 13;
     sim_wind_bearing = rand() % 360;
     sim_precip = rand() % 101;
+
+    /* 状态量也跟着模拟，好看出图标逻辑在动：闹钟三分之二概率有，勿扰偶尔开，
+     * 手机四分之一概率断连，久坐等级 0-5 —— 三种指示器都会走到空/非空两边。 */
+    state_alarm_count = (rand() % 3) > 0 ? 1 : 0;
+    state_dnd = (rand() % 5) == 0;
+    state_phone_connected = (rand() % 4) != 0;
+    state_move_bar = rand() % 6;
 }
 
 static lv_obj_t *root_page = NULL;
@@ -298,6 +373,9 @@ static lv_obj_t *field2_bg_labels[FIELD2_DIGITS];
 static lv_obj_t *field2_val_labels[FIELD2_DIGITS];
 static lv_obj_t *field3_bg_labels[FIELD3_DIGITS];
 static lv_obj_t *field3_val_labels[FIELD3_DIGITS];
+
+static lv_obj_t *icon_label_left = NULL;
+static lv_obj_t *icon_label_right = NULL;
 
 static lv_obj_t *bottom5_bg_labels[BOTTOM5_DIGITS];
 static lv_obj_t *bottom5_val_labels[BOTTOM5_DIGITS];
@@ -436,6 +514,26 @@ static void led_field_create(lv_obj_t *parent, int x, int y, int w, int h, int d
         int cx = x + i * (char_w + LED_FIELD_GAP);
         led_char_create(parent, cx, y, char_w, h, &bg_labels[i], &val_labels[i]);
     }
+}
+
+/* 状态图标位。内容由 watchface_update_icons() 填，空串就是什么都不画。
+ * 字形 adv_w 19px 但最宽的 'A' 位图有 21px，居中对齐后正好落在 ICON_W=22
+ * 的框里；CLIP 只是兜底，正常不会截到东西。 */
+static lv_obj_t *icon_label_create(lv_obj_t *parent, int x, lv_color_t color)
+{
+    lv_obj_t *label = lv_label_create(parent);
+    lv_obj_set_style_text_font(label, FONT_ICONS, LV_PART_MAIN);
+    lv_obj_set_style_text_color(label, color, LV_PART_MAIN);
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(label, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_outline_width(label, 0, LV_PART_MAIN);
+    lv_obj_set_style_shadow_width(label, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(label, 0, LV_PART_MAIN);
+    lv_label_set_long_mode(label, LV_LABEL_LONG_CLIP);
+    lv_obj_set_pos(label, x, ICON_Y);
+    lv_obj_set_size(label, ICON_W, ICON_H);
+    lv_label_set_text(label, "");
+    return label;
 }
 
 static void led_field_set_value(lv_obj_t **bg_labels, lv_obj_t **val_labels,
@@ -811,20 +909,20 @@ void watchface_start(void)
     led_field_create(root_page, field3_x, FIELD_VAL_Y, FIELD3_W, field_h, FIELD3_DIGITS, field3_bg_labels, field3_val_labels);
     printk("watchface_start: fields created\n");
 
-    /* Bottom: icon + 5-digit steps (LED font) + icon
-     * Row 9:  ♥   0 8 5 7 3   🔥   */
-    int bottom_y = FIELD_VAL_Y + field_h + 5;
-    printk("watchface_start: creating heart icon\n");
-    icon_draw(root_page, ICON_HEART, 30, bottom_y + 2, colors->heart_rate);
-    printk("watchface_start: heart icon created\n");
+    /* 倒数第二行：状态图标 + 5 位步数点阵 + 状态图标
+     * Row 9:  ⏰   0 8 5 7 3   ᛒ
+     *
+     * 原来这两侧画的是心形和火焰，用的是 icons.c 里那套自绘位图 —— 它把
+     * 局部坐标当层坐标传给 lv_draw_rect()，像素全落在屏幕左上角、又被裁到
+     * 对象自己的范围里，所以从来一个点都没画出来过。整套换成图标字体：
+     * 走 label + label_set_text()，重绘抑制、换色、裁剪全是现成的。
+     * 心率本来就在正上方的 LAST HR 字段里，这里让给状态指示更有用。 */
+    led_field_create(root_page, BOTTOM5_X, BOTTOM_ROW_Y, BOTTOM5_W, LED_DIGIT_H,
+                     BOTTOM5_DIGITS, bottom5_bg_labels, bottom5_val_labels);
 
-    int bottom5_x = CENTER_X - BOTTOM5_W / 2;
-    printk("watchface_start: creating bottom5 field\n");
-    led_field_create(root_page, bottom5_x, bottom_y, BOTTOM5_W, LED_DIGIT_H, BOTTOM5_DIGITS, bottom5_bg_labels, bottom5_val_labels);
-    printk("watchface_start: bottom5 field created\n");
-
-    icon_draw(root_page, ICON_CALORIES, 200, bottom_y + 2, colors->accent);
-    printk("watchface_start: bottom icons created\n");
+    icon_label_left  = icon_label_create(root_page, ICON_X_LEFT, colors->notif);
+    icon_label_right = icon_label_create(root_page, ICON_X_RIGHT, colors->notif);
+    printk("watchface_start: bottom row created\n");
 
     /* Battery icon — dynamic with fill based on battery level
      * Row 10: centered at bottom, showing battery level 0-100% */
@@ -1167,6 +1265,56 @@ void watchface_update_sensors(void)
 
     watchface_update_weather();
     watchface_update_battery();
+    watchface_update_icons();
+}
+
+void watchface_update_icons(void)
+{
+    if (!icon_label_left || !icon_label_right) return;
+
+    const theme_colors_t *colors = theme_get_colors();
+    /* 85/255 正是参考图集里"蓝牙断开"那个字形的灰度，照抄这个比例 */
+    lv_color_t dim = lv_color_mix(colors->notif, colors->bg, 85);
+
+    label_set_text(icon_label_left,  icon_slot_glyph(icon_slot_left));
+    label_set_color(icon_label_left,
+                    icon_slot_dimmed(icon_slot_left) ? dim : colors->notif);
+
+    label_set_text(icon_label_right, icon_slot_glyph(icon_slot_right));
+    label_set_color(icon_label_right,
+                    icon_slot_dimmed(icon_slot_right) ? dim : colors->notif);
+}
+
+void watchface_set_icon_slots(icon_slot_t left, icon_slot_t right)
+{
+    icon_slot_left = left;
+    icon_slot_right = right;
+    watchface_update_icons();
+}
+
+void watchface_set_alarm_count(int count)
+{
+    state_alarm_count = count;
+    watchface_update_icons();
+}
+
+void watchface_set_dnd(bool on)
+{
+    state_dnd = on;
+    watchface_update_icons();
+}
+
+void watchface_set_phone_connected(bool connected)
+{
+    state_phone_connected = connected;
+    watchface_update_icons();
+}
+
+void watchface_set_move_bar_level(int level)
+{
+    /* 越界的等级按最近的合法值收，别让它去索引字形表 */
+    state_move_bar = level < 0 ? 0 : (level > 5 ? 5 : level);
+    watchface_update_icons();
 }
 
 void watchface_switch_battery_display(void)
@@ -1240,4 +1388,6 @@ void watchface_switch_theme(void)
 
     lv_obj_set_style_bg_color(stress_bar, colors->stress, LV_PART_MAIN);
     lv_obj_set_style_bg_color(bodybatt_bar, colors->bodybatt, LV_PART_MAIN);
+
+    watchface_update_icons();   /* 图标颜色分亮/暗两种，统一由它算 */
 }
