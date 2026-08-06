@@ -412,12 +412,13 @@ lv_obj_set_style_text_font(label, &lv_font_xxx, LV_PART_MAIN);
 
 ## 9. 当前项目字体清单
 
-| 字体文件 | 字体名称 | 用途 | bpp | 来源 |
-|----------|----------|------|-----|------|
-| `lv_font_cjk.c` | `lv_font_cjk` | CJK 中文字体（13px，中文模式下的天气行/农历行/日期行） | 4 | gen_cjk_font.py 生成 |
-| `lv_font_segments80.c` | `lv_font_segments80` | 数码管时钟字体 | 4 | bmfont2lvgl.py 转换 |
-| `lv_font_led.c` | `lv_font_led` | 表盘 LED 点阵数值/标签（数值行、倒数第二行 steps） | 1 | gen_led_font_v3.py 生成 + §5.3 手改 |
-| `lv_font_led_small.c` | `lv_font_led_small` | 日期行字体（13px） | 1 | gen_font.py 生成 |
-| `lv_font_xsmol.c` | `lv_font_xsmol` | 标签行字体（10px） | 1 | gen_font.py 生成 |
+| 字体文件 | 字体名称 | 规格 | 用途 | bpp | 来源 |
+|----------|----------|------|------|-----|------|
+| `lv_font_segments80.c` | `lv_font_segments80` | 42×80 | 大时钟（数字 + `:` + `#` 网格） | 4 | `app/scripts/bmfont2lvgl.py` 转换 |
+| `lv_font_led.c` | `lv_font_led` | 14×20 | 三字段数值行 + 步数行（反相极性） | 1 | `tools/gen_led_font_v3.py` 生成 + **§5.3 手改** |
+| `lv_font_xsmol.c` | `lv_font_xsmol` | 10px | DAWN/DUSK 小标签、三字段标签 | 1 | `tools/gen_font.py` 生成 |
+| `lv_font_cjk.c` | `lv_font_cjk` | 13px | 中文天气行/农历行/日期行（含 ℃/箭头） | 4 | `gen_cjk_font.py`（项目根）生成 |
+| `lv_font_moon.c` | `lv_font_moon` | 20×20, 9 字形 | 月相图片（`'0'`-`'7'`= 8 相，`'8'`= 死星彩蛋） | 1 | `tools/gen_font.py` 生成 |
+| `lv_font_icons.c` | `lv_font_icons` | 21px | 状态图标（`A`=闹钟 `D`=勿扰 `L`=蓝牙 `N`-`R`=久坐级别） | 1 | `tools/gen_font.py` 生成 |
 
 > `lv_font_led.c` 每次用 `gen_led_font_v3.py` 重新生成后，**必须执行 §5.3 的 3 条手改**，否则会出现数字显示偏移 / 空格占位框 / LVGL 占位符渲染等问题。

@@ -1,15 +1,22 @@
 # Segment34 Watchface 项目文档
 
+> 架构总览。配置/内存/调试细节见 [DEVELOPMENT.md](DEVELOPMENT.md)，字体见 [FONTS.md](FONTS.md)，
+> 农历数据见 [LUNAR.md](LUNAR.md)，上手与接线见 [HANDOVER.md](HANDOVER.md)。
+
 ## 1. 项目概览
 
 | 项 | 说明 |
 |---|---|
 | 项目名 | Segment34 Watchface（段码式表盘） |
-| 参考项目 | [Segment34.CN](https://github.com/laukeng/Segment34.CN)（Garmin Connect IQ 表盘） |
-| 技术栈 | Zephyr RTOS v3.5.0 + LVGL v9.5.0 |
-| 目标硬件 | Xiao BLE nRF52840（1MB Flash / 256KB RAM）+ GC9A01 圆形屏 240×240 |
-| 模拟器 | native_sim（SDL），在 PC 上运行 |
-| 依赖 | `west.yml` 管理 Zephyr/LVGL/zswatch 三个仓库 |
+| 参考项目 | [Segment34.CN](https://github.com/laukeng/Segment34.CN)（Garmin Connect IQ 表盘，Monkey C） |
+| 技术栈 | Zephyr RTOS v4.4.1 + LVGL v9.5.0 |
+| 目标硬件 | Seeed XIAO BLE nRF52840 Sense（1 MB Flash / 256 KB RAM）+ GC9A01 圆屏 240×240 |
+| 模拟器 | `native_sim/native/64`（SDL），PC 上同分辨率运行 |
+| 语言 | C99；字体/农历表由 Python 脚本离线生成 |
+
+**关于 `app/west.yml`**：它写着 Zephyr v3.5.0 / LVGL v9.5.0，但当前 workspace 的
+`.west/config` 指向的是 `zephyr/west.yml`，实际用的是 **Zephyr v4.4.1**。`app/west.yml`
+目前不是生效的清单，改它不影响构建。
 
 ---
 
@@ -17,522 +24,423 @@
 
 ```
 lgvl_watchUi/
+├── README.md                   # 项目入口与文档索引
+├── gen_cjk_font.py             # CJK 字体生成器（当前在用，见 FONTS.md §2）
 ├── app/
-│   ├── CMakeLists.txt          # 构建配置，8 个源文件
-│   ├── prj.conf                # 项目全局配置（LVGL/内核/硬件）
-│   ├── Kconfig                 # 项目自定义 Kconfig
-│   ├── west.yml                # West 依赖管理
+│   ├── CMakeLists.txt          # 11 个源文件 + 5 个 include 目录
+│   ├── prj.conf                # 全局配置（LVGL/内核/显示）
+│   ├── Kconfig                 # 只 source Kconfig.zephyr；自定义选项已全部删除
+│   ├── west.yml                # 非生效清单，见上
 │   ├── boards/
-│   │   ├── native_sim.conf     # 模拟器覆盖配置
-│   │   ├── native_sim.overlay  # 模拟器设备树覆盖
-│   │   ├── xiao_ble.conf       # Xiao BLE 硬件配置
-│   │   ├── xiao_ble.overlay    # Xiao BLE 设备树
-│   │   ├── zswatch.conf        # ZSWatch 硬件配置
-│   │   └── zswatch.overlay     # ZSWatch 设备树
-│   ├── docs/
-│   │   ├── DEVELOPMENT.md      # 开发文档
-│   │   ├── HANDOVER.md         # 交接文档
-│   │   └── PROJECT.md          # 项目总文档（本文件）
+│   │   ├── native_sim_native_64.conf     # 模拟器覆盖配置
+│   │   ├── native_sim_native_64.overlay  # 强制 SDL 为 240×240
+│   │   ├── xiao_ble_nrf52840_sense.conf     # 真机配置
+│   │   ├── xiao_ble_nrf52840_sense.overlay  # GC9A01 over MIPI-DBI SPI
+│   │   ├── zswatch.conf / zswatch.overlay   # ZSWatch（未验证）
+│   ├── docs/                   # 本目录
 │   ├── scripts/
-│   │   └── generate_font.py    # CJK 字体生成脚本
+│   │   ├── bmfont2lvgl.py      # BMFont→LVGL（4bpp，生成 segments80）
+│   │   └── generate_font.py    # 旧 CJK 路线（lv_font_conv），已被 gen_cjk_font.py 取代
 │   └── src/
-│       ├── main.c              # 入口：初始化显示 + LVGL 主循环
+│       ├── main.c              # 入口：解除 blanking + LVGL 主循环
 │       ├── components/
-│       │   ├── watchface.c/h   # 表盘主 UI（布局/定时器/数据更新）
-│       │   ├── segment34.c/h   # 7 段数码管自定义绘制
-│       │   ├── icons.c/h       # 10 种像素图标绘制
-│       │   └── lunar_calendar.c/h  # 农历转换
-│       ├── locale/
-│       │   └── locale.c/h      # 中英双语国际化
-│       ├── theme/
-│       │   └── theme.c/h       # 6 套主题色方案
-│       └── fonts/
-│           └── lv_font_cjk.c/h # CJK 16px 字体
-├── gen_cjk_font.py             # CJK 字体生成脚本（根目录）
-└── .vscode/
-    └── c_cpp_properties.json   # VS Code C/C++ 配置
+│       │   ├── watchface.c/h   # 表盘全部 UI：布局、渲染分层、缓存、定时器、状态输入
+│       │   └── lunar_calendar.c/h  # 公历→农历/节气（查表，2026-2056）
+│       ├── locale/locale.c/h   # 中英双语字符串表
+│       ├── theme/theme.c/h     # 8 套主题 × 17 个颜色角色
+│       └── fonts/              # 6 个自定义字体（见 §5）
+└── tools/                      # 字体与农历表的生成/校验脚本
 ```
+
+**注意：`segment34.c` 和 `icons.c` 已经不存在了。** 早期版本用自绘 7 段数码管和自绘
+像素图标，现在两者都换成了位图字体（`lv_font_segments80` / `lv_font_icons`），旧文档里
+提到的这两个模块、`segment34_set_time()`、`icon_draw()` 等 API 都已删除。
 
 ---
 
-## 3. 各模块详解
+## 3. 屏幕布局（240×240 圆屏）
 
-### 3.1 main.c — 程序入口
-
-**文件**：`app/src/main.c`
-
-```
-main()
-  ├── 获取显示设备 → display_blanking_off()
-  ├── watchface_start()          ← 创建所有 UI 对象
-  └── while(1) { lv_timer_handler(); k_msleep(5); }  ← 5ms 刷新
-```
-
-**关键注意事项**：
-- LVGL 已由 Zephyr 的 SYS_INIT 阶段初始化完毕
-- 应用层**不能**重复调用 `lv_init()` / `lv_display_create()` / `lv_theme_default_init()`
-- 否则会创建第二个没有渲染缓冲的显示，导致 `lv_timer_handler()` 崩溃
-
----
-
-### 3.2 watchface.c — 表盘主逻辑
-
-**文件**：`app/src/components/watchface.c` / `watchface.h`
-
-#### 布局坐标图（240×240 圆形屏幕）
+所有坐标都是 `watchface.c` 里的宏算出来的，改宏就改布局；越出圆形可视区会**编译不过**
+（见 §4.2）。
 
 ```
-Y=0   ┌─────────────────────────────────┐
-      │  DAWN:     [moon]     DUSK:     │  Y=8 (FONT_LABEL 8px)
-      │  01:18     [1QTR]     03:13     │  Y=22 (FONT_DATA 10px)
-Y=40  │       59F, +4, 27%               │  (FONT_MED 12px)
-Y=58  │       PARTLY CLOUDY              │  (FONT_MED 12px)
-Y=82  │  ┃                              │  ← stress_bar (3×36px, 左侧)
-      │  ┃   1 0 : 3 7                  │  ← segment34 时钟 (200×70)
-      │  ┃                              │  ┃ ← bodybatt_bar (3×36px, 右侧)
-Y=152 │  MON, 5 MAY 2025           32   │  ← date_label + seconds_label
-Y=180 │  RECOVERY   LAST HR:  WEEK ACT  │  ← 3 个字段标签 (FONT_LABEL 8px)
-      │   HRS:                         MIN:│
-Y=192 │    5.0        80        0       │  ← 3 个字段值 (FONT_BIG 16px)
-Y=224 │  ♥     08573     🔥            │  ← 图标 + 5位步数 + 图标
-Y=246 │           [battery]             │  ← 电池图标
-      └─────────────────────────────────┘
+      ┌───────────────────────────────────┐
+ y=10 │            [🌙 20×20]             │  moon_label（图片模式，字形 '0'-'7'）
+ y=11 │   DAWN:                  DUSK:    │  xsmol 10px
+ y=19 │   01:18                  03:13    │  montserrat_10
+ y=30 │        15~17℃, ↗4, 27%           │  temp_label（CJK 字体，含 ℃ 和箭头）
+ y=45 │        PARTLY CLOUDY (40%)        │  weather_label（中文模式这行是农历）
+      │  ┃                             ┃  │  stress_bar / bodybatt_bar（3px 宽）
+ y=60 │  ┃    ██ ██  :  ██ ██          ┃  │  时钟 5 列，x=23..216，h=80
+      │  ┃                             ┃  │
+y=144 │      MON, 5 MAY 2025        32    │  date_label + seconds_label
+y=160 │  RECOVERY   LAST HR:  WEEK ACT    │  三个字段标签（xsmol 10px）
+      │  HRS:                      MIN:   │
+y=173 │    5.0        80         0        │  三个 LED 点阵数值（3 格 × 16px）
+y=198 │   [A]   0 8 5 7 3   [ᛒ]           │  状态图标 + 5 位步数点阵
+y=223 │            [▮▮▮  ]                │  电池图标 24×12 + 帽 3×6
+      └───────────────────────────────────┘
 ```
 
-#### 布局常量
+### 关键几何常量
 
 ```c
-#define SCREEN_W 240
-#define SCREEN_H 240
-#define CENTER_X 120
-#define CENTER_Y 120
+#define SAFE_R 117          /* 圆形可视区半径，圆心 (119.5, 119.5) */
 
-#define CLOCK_W 200
-#define CLOCK_H 70
-#define CLOCK_X 20
-#define CLOCK_Y 82
+#define COL_W    42         /* 数字列宽（= segments80 字形宽） */
+#define COLON_W  18         /* 冒号列收窄，这是把时钟塞进圆里代价最小的一刀 */
+#define COL_GAP  2
+#define CLOCK_W  194        /* 4*42 + 18 + 4*2 */
+#define CLOCK_H  80
+#define CLOCK_X  23         /* CENTER_X - CLOCK_W/2 */
+#define CLOCK_Y  60
 
-#define FONT_LABEL  &lv_font_montserrat_8    // 小标签
-#define FONT_DATA   &lv_font_montserrat_10   // 数据文字
-#define FONT_MED    &lv_font_montserrat_12   // 中等文字
-#define FONT_BIG    &lv_font_cjk_16          // 大数字（CJK字体）
+#define LED_DIGIT_W 16      /* LED 字体 adv_w：14px 字形 + 2px 间隙 */
+#define LED_DIGIT_H 20
+#define FIELD1_DIGITS 3     /* 三个数值字段各 3 格（4 格会被圆切掉） */
+#define FIELD_GAP  16
+#define BOTTOM5_DIGITS 5    /* 步数 5 位 */
+#define ICON_W 22           /* 状态图标位；ICON_GAP=2 是往内收的间隙 */
 ```
 
-#### API 函数
+### 字体宏
 
-| 函数 | 作用 | 调用时机 |
+| 宏 | 指向 | 用在哪 |
 |---|---|---|
-| `watchface_start()` | 创建所有 UI 对象、启动定时器 | `main()` 中调用 |
-| `watchface_stop()` | 删除定时器和 UI 对象 | 退出时 |
-| `watchface_update_time()` | 更新时钟+冒号闪烁+秒数 | 每秒 |
-| `watchface_update_date()` | 更新日期/月相/日出日落 | 每秒 |
-| `watchface_update_weather()` | 更新温度+天气描述 | 每 10 秒 |
-| `watchface_update_sensors()` | 更新心率/步数/卡路里/电池 | 每 10 秒 |
-| `watchface_switch_language()` | 中英文切换 | 用户触发 |
-| `watchface_switch_theme()` | 6 套主题循环切换 | 用户触发 |
+| `FONT_LABEL` | `lv_font_xsmol`（10px, 1bpp） | DAWN/DUSK、三个字段标签 |
+| `FONT_DATA` | `lv_font_montserrat_12` | 日期行、秒数 |
+| `FONT_TIME_SMALL` | `lv_font_montserrat_10` | 日出日落时间 |
+| `FONT_MED` | `lv_font_montserrat_12` | 天气描述行 |
+| `FONT_CJK` | `lv_font_cjk`（13px, 4bpp） | 中文行、含 ℃/箭头的温度行 |
+| `FONT_LED` | `lv_font_led`（14×20, 1bpp） | 三个字段数值 + 步数 |
+| `FONT_MOON` / `FONT_MOON_IMAGE` | `montserrat_8` / `lv_font_moon`（20×20） | 月相文字 / 月相图 |
+| `FONT_ICONS` | `lv_font_icons`（21px, 1bpp） | 闹钟/勿扰/蓝牙/久坐图标 |
 
-#### 定时器
-
-- `time_timer`：1000ms，更新时间+日期
-- `sensor_timer`：10000ms，更新传感器模拟数据
-
-#### UI 对象清单（共约 20 个 lv_obj_t）
-
-| 对象 | 类型 | 位置 | 字体 | 颜色角色 |
-|---|---|---|---|---|
-| `root_page` | container | (0,0) 240×240 | - | bg |
-| `dawn_label` | label | (10, 8) | montserrat_8 | field_lbl |
-| `dawn_time_label` | label | (10, 22) | montserrat_10 | data_val |
-| `moon_label` | label | (105, 12) | montserrat_10 | moon |
-| `dusk_label` | label | (180, 8) | montserrat_8 | field_lbl |
-| `dusk_time_label` | label | (180, 22) | montserrat_10 | data_val |
-| `temp_label` | label | (0, 40) | montserrat_12 | text |
-| `weather_label` | label | (0, 58) | montserrat_12 | weather |
-| `segment_clock` | custom obj | (20, 82) 200×70 | - | clock_on / clock_off |
-| `stress_bar` | rect obj | (15, 116) 3×36 | - | stress |
-| `bodybatt_bar` | rect obj | (222, 116) 3×36 | - | bodybatt |
-| `date_label` | label | (20, 160) | montserrat_10 | text |
-| `seconds_label` | label | (198, 160) | montserrat_10 | data_val |
-| `field1_label` | label | (6, 180) | montserrat_8 | field_lbl |
-| `field1_value` | label | (6, 192) | cjk_16 | heart_rate |
-| `field2_label` | label | (86, 180) | montserrat_8 | field_lbl |
-| `field2_value` | label | (86, 192) | cjk_16 | steps |
-| `field3_label` | label | (166, 180) | montserrat_8 | field_lbl |
-| `field3_value` | label | (166, 192) | cjk_16 | accent |
-| `bottom5_label` | label | (90, 224) | montserrat_12 | clock_on |
-| 底部图标 ×3 | custom obj | 底部各位置 | - | 各角色 |
+`FONT_CJK` 的 `line_height=15 / base_line=3` 与 `montserrat_12` 完全一致，所以中英文行占
+同样的垂直空间，布局不用按语言分支。
 
 ---
 
-### 3.3 segment34.c — 数码管时钟
+## 4. watchface.c — 全部 UI 逻辑
 
-**文件**：`app/src/components/segment34.c` / `segment34.h`
+1400 行，是项目里唯一的 UI 模块。理解它就理解了整个表盘。
 
-#### 工作原理
+### 4.1 渲染分层：时钟为什么不是"画数字"
+
+`lv_font_segments80` 的字形是**反相**的：不透明像素 = 非笔段。每一列时钟叠三层：
 
 ```
-segment34_init()
-  → 创建 1 个 lv_obj_t
-  → 注册 LV_EVENT_DRAW_MAIN 回调
-  → segment34_draw_event_cb() 中绘制 4 位数字 + 冒号
-
-segment34_set_time(hours, minutes)
-  → 更新 digits[4] = {H/10, H%10, M/10, M%10}
-  → lv_obj_invalidate() 触发重绘
+Layer 0  列容器背景     纯色 clock_on              →  笔段的底色（亮）
+Layer 1  digit label   数字/':' 用 clock_off 画    →  盖住非笔段（暗）
+Layer 2  grid  label   '#' 用黑色画                →  网格线与点阵纹理，压在最上面
 ```
 
-#### 7 段掩码表
+结果：笔段处透出 Layer 0 的亮色，非笔段处是 Layer 1 的暗色，网格黑线覆盖全列。
+换主题只需要改 Layer 0 的背景色和 Layer 1 的文字色，Layer 2 恒为黑。
+
+LED 点阵字段（`led_char_create`）用同样的把戏，每格两层：bg label 画 `#`（35 个点全亮）
+做底，val label 画数字盖住非笔段。数字位 bg 用白、val 用暗绿；空位 bg 用暗绿、val 是空格。
+
+窄冒号列里塞 42px 宽的字形，靠 `LV_TEXT_ALIGN_CENTER + LV_LABEL_LONG_CLIP` 居中裁切——
+网格是均匀重复的、冒号两点也在正中，裁掉的都是空边。
+
+### 4.2 圆形可视区的编译期校核
 
 ```c
-static const uint16_t segment_masks_7seg[10] = {
-    0x3F, 0x06, 0x5B, 0x4F, 0x66,  // 0 1 2 3 4
-    0x6D, 0x7D, 0x07, 0x7F, 0x6F   // 5 6 7 8 9
-};
+BUILD_ASSERT(FITS_IN_SAFE_CIRCLE(CLOCK_W, CLOCK_Y, CLOCK_Y + CLOCK_H - 1), ...);
+BUILD_ASSERT(FITS_IN_SAFE_CIRCLE(FIELD_ROW_W, FIELD_VAL_Y, ...), ...);
+BUILD_ASSERT(... 左图标 ...);  BUILD_ASSERT(... 右图标 ...);
 ```
 
-每位的 7 个段（a-g）位置计算：
-- `sw = digit_w / 4`（段宽）
-- `sh = digit_h / 7`（段高）
-- 段 a (顶横)
-- 段 b (右上竖)
-- 段 c (右下竖)
-- 段 d (底横)
-- 段 e (左下竖)
-- 段 f (左上竖)
-- 段 g (中间横)
+判据是**元素的四个角**而不是宽度：同样宽的一行，越靠上/下越容易被圆切。全部按 2 倍坐标
+做整数运算以避开圆心的半像素。改了列宽、`CLOCK_Y`、字段格数或 `ICON_GAP` 而越界的话，
+直接编译失败并给出该往哪个方向改。运行期的抓帧校核方法见 DEVELOPMENT.md §7.4。
 
-#### 数据结构
+### 4.3 重绘抑制与分级缓存
+
+`lv_label_set_text()` 不管内容变没变都会重新分配文本、重排版、invalidate 整个 label——
+在 GC9A01 上就是一次真实的 SPI 刷屏。所以所有文本/颜色更新统一走两个 helper：
 
 ```c
-typedef struct {
-    lv_obj_t *obj;
-    uint16_t width;
-    uint16_t height;
-    lv_color_t color_on;
-    lv_color_t color_off;
-    bool show_colon;
-    uint8_t digits[4];  // [小时十位, 小时个位, 分钟十位, 分钟个位]
-} segment34_t;
+static void label_set_text(lv_obj_t *label, const char *text);   /* 内容相同则 no-op */
+static void label_set_color(lv_obj_t *obj, lv_color_t color);    /* 颜色相同则 no-op */
 ```
 
----
+在此之上还有按变化频率分的三级缓存：
 
-### 3.4 icons.c — 像素图标
-
-**文件**：`app/src/components/icons.c` / `icons.h`
-
-#### 工作原理
-
-```
-icon_draw(parent, ICON_HEART, x, y, color)
-  → 创建 8×16 的 lv_obj_t
-  → 用 icon_info_t 存储图标类型+颜色（lv_malloc 分配）
-  → LV_EVENT_DRAW_MAIN 回调中逐像素绘制
-```
-
-#### 图标数据格式
-
-每行 1 字节（8 像素宽），bit=1 画点，bit=0 不画。
-
-#### 图标列表
-
-| 枚举名 | 尺寸 | 用途 |
+| 数据 | 变化频率 | 拦截方式 |
 |---|---|---|
-| ICON_HEART | 8×8 | 心率 |
-| ICON_STEPS | 8×11 | 步数 |
-| ICON_BATTERY_FULL | 8×8 | 电池满 |
-| ICON_BATTERY_EMPTY | 8×8 | 电池空 |
-| ICON_ALARM | 8×10 | 闹钟 |
-| ICON_BLUETOOTH | 8×9 | 蓝牙 |
-| ICON_MOON | 8×9 | 月相 |
-| ICON_ARROW_UP | 8×9 | 上升箭头 |
-| ICON_ARROW_DOWN | 8×9 | 下降箭头 |
-| ICON_CALORIES | 8×9 | 卡路里 |
+| 秒数 | 每秒 | 不拦 |
+| 时钟数字 | 分位每分钟、时位每小时 | `label_set_text()` 相等判断 |
+| 日期 / 月相 / 日出日落 | 每天 | `cached_day_key`（年×512+yday），换天前直接 return |
+| 农历 + 节气 | 每天 | `lunar_day_key` + `lunar_line[64]` 字符串缓存 |
+| 天气数据 | `WEATHER_REFRESH_MIN` = 30 分钟 | `weather_next_refresh` 时间戳 |
 
-#### 添加新图标的步骤
+农历换算要线性扫 383 项月表 + 744 项节气表，务必只在换天时做一次。
+切换语言/主题后调 `watchface_invalidate_cache()` 让全部缓存失效、整屏重算。
 
-1. 在 `icons.h` 的 `icon_t` 枚举中新增一项
-2. 在 `icons.c` 中新增位图数据数组
-3. 在 `get_icon_data()` 函数的 switch 中新增 case
+### 4.4 定时器
+
+| 定时器 | 周期 | 回调做什么 |
+|---|---|---|
+| `time_timer` | 1000 ms | `watchface_update_time()` + `watchface_update_date()` |
+| `sensor_timer` | 10000 ms | 刷新模拟数据 → `watchface_update_sensors()`（内部再调 weather/battery/icons） |
+
+### 4.5 公开 API
+
+```c
+void watchface_start(void);              /* 建全部 UI + 启定时器；main() 调一次 */
+void watchface_stop(void);               /* 删定时器 + 删 root_page */
+
+void watchface_update_time(void);        /* 时钟数字 */
+void watchface_update_date(void);        /* 秒数 + 日期/月相/日出日落（按天缓存） */
+void watchface_update_weather(void);     /* 温度/风/湿度行 + 天气描述或农历行 */
+void watchface_update_battery(void);     /* 电池填充宽度、颜色、百分比显示模式 */
+void watchface_update_sensors(void);     /* 三字段 + 步数 + 压力/体能条，并调用上面三个 */
+void watchface_update_icons(void);       /* 两个状态图标位 */
+
+void watchface_switch_language(void);        /* ZH ↔ EN */
+void watchface_switch_theme(void);           /* 8 套主题循环 */
+void watchface_switch_battery_display(void); /* 不显示 → 内部 → 外部 */
+void watchface_switch_moon_display(void);    /* 文字 ↔ 图片 */
+```
+
+这些 `switch_*` 目前**没有绑定任何输入事件**，只能从代码里调用。接按键/触摸时在这里挂。
+
+### 4.6 状态图标位
+
+倒数第二行（步数点阵）左右各一个图标位。每个位置选一种**指示器**，具体画哪个字形——
+或者什么都不画——由状态决定。这套结构照搬 Segment34 的 `icon1`/`icon2` + `getIconState()`。
+
+| 指示器 | 显示条件 | 字形 |
+|---|---|---|
+| `ICON_SLOT_ALARM` | 闹钟数 > 0 | `A` |
+| `ICON_SLOT_DND` | 勿扰开启 | `D` |
+| `ICON_SLOT_BLUETOOTH` | 始终显示（断开时画暗色） | `L` |
+| `ICON_SLOT_BLUETOOTH_OFF` | 仅断开时显示 | `L` |
+| `ICON_SLOT_MOVE_BAR` | 久坐等级 1-5 | `N` `O` `P` `Q` `R` |
+| `ICON_SLOT_NONE` | 从不显示 | — |
+
+```c
+watchface_set_icon_slots(ICON_SLOT_ALARM, ICON_SLOT_BLUETOOTH);   /* 默认值 */
+
+/* 状态输入。目前由 sim_update_weather() 喂随机值；接真实数据源时改从
+ * RTC 闹钟表 / BLE 连接回调 / 活动监测调这几个函数，渲染侧不用动。 */
+watchface_set_alarm_count(1);
+watchface_set_dnd(false);
+watchface_set_phone_connected(true);
+watchface_set_move_bar_level(0);        /* 0-5，越界自动收到最近的合法值 */
+```
+
+蓝牙断开在参考图集里是字形 `M`，但它与 `L` 逐像素相同，区别只是整个符文画成 85/255 的
+灰度。1bpp 字体装不下这个区别，所以 `M` 不收进字体，断开状态改用同一个 `L` 配
+`lv_color_mix(notif, bg, 85)` 的暗色。
+
+### 4.7 数据来源现状
+
+**所有传感器/天气/状态数据都是模拟值**，定义在 `watchface.c` 顶部的 `sim_*` 和 `state_*`
+静态变量里，由 `sim_update_data()` / `sim_update_weather()` 每 10 秒随机扰动。时间取自
+`time(NULL)`（真机上还没接 RTC）。接真实数据时替换这两个函数即可，渲染路径不用动。
+
+模拟温度是华氏度，界面统一用 `fahrenheit_to_celsius()` 转成摄氏度显示（做了四舍五入
+补偿，C 的整数除法是向零截断的）。
 
 ---
 
-### 3.5 theme.c — 主题系统
+## 5. 字体
 
-**文件**：`app/src/theme/theme.c` / `theme.h`
-
-6 套主题 × 17 种颜色角色。
-
-#### 主题列表
-
-| 主题 | 时钟色 | 强调色 | 背景 |
+| 字体 | 规格 | 用途 | 生成器 |
 |---|---|---|---|
-| green | #00FF88 | #FFAA00 | #0A1628 |
-| blue | #00AAFF | #FFAA00 | #0A1628 |
-| red | #FF4444 | #FFAA00 | #1A0A10 |
-| orange | #FFAA00 | #FF4444 | #1A100A |
-| purple | 见代码 | 见代码 | 见代码 |
-| cyan | 见代码 | 见代码 | 见代码 |
+| `lv_font_segments80` | 42×80, 4bpp | 大时钟（数字 + `:` + `#` 网格） | `app/scripts/bmfont2lvgl.py` |
+| `lv_font_led` | 14×20, 1bpp | 字段数值 + 步数（反相极性） | `tools/gen_led_font_v3.py` **+ 手改** |
+| `lv_font_xsmol` | 10px, 1bpp | 小标签 | `tools/gen_font.py` |
+| `lv_font_cjk` | 13px, 4bpp, 211 字形 | 中文行 + ℃/箭头 | `gen_cjk_font.py`（项目根） |
+| `lv_font_moon` | 20×20, 1bpp, 9 字形 | 月相 `'0'`-`'7'` + 死星 `'8'` | `tools/gen_font.py` |
+| `lv_font_icons` | 21px, 1bpp | 状态图标 `A/D/L/N-R` | `tools/gen_font.py` |
 
-#### 颜色角色
-
-| 角色 | 用途 |
-|---|---|
-| `bg` | 背景色 |
-| `clock_on` | 时钟点亮段颜色 |
-| `clock_off` | 时钟熄灭段颜色 |
-| `text` | 普通文字 |
-| `accent` | 强调色（卡路里等） |
-| `weather` | 天气描述文字 |
-| `heart_rate` | 心率数值 |
-| `steps` | 步数数值 |
-| `battery` | 电池图标 |
-| `field_lbl` | 字段标签（暗色调） |
-| `field_bg` | 字段背景 |
-| `data_val` | 数据值文字（日出日落时间等） |
-| `stress` | 压力条（左侧竖条） |
-| `bodybatt` | 身体电量条（右侧竖条） |
-| `notif` | 通知数 |
-| `moon` | 月相文字 |
-| `outline` | 边框 |
-
-#### 切换主题
-
-调用 `watchface_switch_theme()` 循环切换 6 套主题。
+细节、必做手改和踩过的坑见 [FONTS.md](FONTS.md)。
 
 ---
 
-### 3.6 locale.c — 国际化
+## 6. theme.c — 主题系统
 
-**文件**：`app/src/locale/locale.c` / `locale.h`
-
-#### 工作原理
+**8 套主题 × 17 个颜色角色**。枚举顺序与 `themes[]` 数组顺序必须严格一致
+（历史上错位过一次，导致整屏配色乱套）。
 
 ```c
-locale_get_string(LOCALE_STR_MONDAY)
-  → current_lang == LANG_EN ? "MON" : "星期一"
+typedef enum {
+    THEME_YELLOW,        /* 默认 */
+    THEME_PINK,
+    THEME_ORANGE_LIGHT,  /* 数组里 .name = "orange" */
+    THEME_GREEN, THEME_BLUE, THEME_RED, THEME_PURPLE, THEME_CYAN,
+    THEME_COUNT
+} theme_color_t;
 ```
 
-#### 字符串列表
-
-- 星期：MON-SUN / 星期一-星期日
-- 月份：JAN-DEC / 一月-十二月
-- 天气：SUNNY/CLOUDY/OVERCAST/RAIN/SNOW / 晴/多云/阴/雨/雪
-- 传感器：HR/STEPS/BATTERY/FLOORS/CAL / 心率/步数/电池/楼层/卡路里
-- 日出日落：DAWN/DUSK / 日出/日落
-- 月相：NEW/1QTR/FULL/3QTR / 新月/上弦/满月/下弦
-- 语言：Chinese/English / 中文/英文
-
-共 35 个字符串 ID，中英双语。**默认语言为 LANG_EN**。
-
----
-
-### 3.7 lunar_calendar.c — 农历
-
-**文件**：`app/src/components/lunar_calendar.c` / `lunar_calendar.h`
-
-```c
-lunar_calendar_convert(2026, 7, 25, &lunar)
-  → lunar.year_name = "丙午年"
-  → lunar.month_name = "六月"
-  → lunar.day_name = "初二"
-  → lunar.jieqi = "大暑"
-```
-
-#### API
-
-| 函数 | 作用 |
-|---|---|
-| `lunar_calendar_convert()` | 公历转农历完整信息 |
-| `lunar_get_year_name()` | 天干地支年名 |
-| `lunar_get_month_name()` | 农历月名（含闰月标记） |
-| `lunar_get_day_name()` | 农历日名 |
-| `lunar_get_jieqi()` | 节气名称 |
-
----
-
-## 4. 构建与运行
-
-### 4.1 模拟器（PC 上快速预览）
-
-```bash
-# 编译
-west build -b native_sim lgvl_watchUi/app --build-dir native_ui
-
-# 运行
-cd native_ui && ./zephyr.exe
-```
-
-### 4.2 真机（Xiao BLE nRF52840）
-
-```bash
-# 编译
-west build -b xiao_ble lgvl_watchUi/app --build-dir build_xiao
-
-# 烧录
-west flash
-```
-
----
-
-## 5. 配置文件说明
-
-| 文件 | 用途 |
-|---|---|
-| `app/prj.conf` | 全局配置：LVGL minimal、16bpp、字体 8/10/12/14、内存 32KB |
-| `app/boards/native_sim.conf` | 模拟器：SDL 显示、日志 DEBUG 级 |
-| `app/boards/xiao_ble.conf` | 真机：GC9A01 显示、传感器占位 |
-
-### LVGL 关键配置（prj.conf）
-
-```ini
-CONFIG_LVGL=y
-CONFIG_LV_COLOR_DEPTH_16=y
-CONFIG_LV_CONF_MINIMAL=y
-
-# 布局引擎
-CONFIG_LV_USE_FLEX=y
-CONFIG_LV_USE_THEME_DEFAULT=y
-
-# 字体
-CONFIG_LV_FONT_MONTSERRAT_8=y
-CONFIG_LV_FONT_MONTSERRAT_10=y
-CONFIG_LV_FONT_MONTSERRAT_12=y
-CONFIG_LV_FONT_MONTSERRAT_14=y
-
-# 控件
-CONFIG_LV_USE_LABEL=y
-CONFIG_LV_USE_BAR=y
-
-# 内存
-CONFIG_LV_Z_MEM_POOL_SIZE=32768   # 32 KB LVGL 堆
-
-# 渲染缓冲
-CONFIG_LV_USE_DRAW_SW=y
-CONFIG_LV_Z_VDB_SIZE=10            # 10% 屏幕大小
-CONFIG_LV_Z_DOUBLE_VDB=y           # 双缓冲
-```
-
-### 启用更多字体
-
-在 `prj.conf` 和对应 board 的 `.conf` 中添加：
-```ini
-CONFIG_LV_FONT_MONTSERRAT_16=y
-CONFIG_LV_FONT_MONTSERRAT_20=y
-```
-
----
-
-## 6. 常见修改指南
-
-| 想做什么 | 改哪个文件 | 改什么 |
+| 主题 | clock_on | bg |
 |---|---|---|
-| 调整布局位置 | `watchface.c` | `lv_obj_set_pos()` 的 x/y 参数 |
-| 改字体大小 | `watchface.c` | `FONT_LABEL/FONT_DATA/FONT_MED/FONT_BIG` 宏 |
-| 改颜色 | `theme.c` | 对应主题的 `theme_colors_t` 字段 |
-| 加新图标 | `icons.c/h` | 新增 bitmap 数据 + enum + get_icon_data 分支 |
-| 加新字符串 | `locale.h/c` | 新增 enum + zh_strings/en_strings 条目 |
-| 加新 UI 元素 | `watchface.c` | `watchface_start()` 中创建，`watchface_update_*()` 中更新 |
-| 启用更多字体 | `prj.conf` + `boards/*.conf` | `CONFIG_LV_FONT_MONTSERRAT_XX=y` |
-| 调整内存 | `prj.conf` | `CONFIG_LV_Z_MEM_POOL_SIZE` |
-| 改时钟样式 | `segment34.c` | `segment34_draw_event_cb()` 中的段绘制逻辑 |
-| 切换默认语言 | `locale.c` | `current_lang = LANG_EN` 改为 `LANG_ZH` |
-| 切换默认主题 | `watchface.c` | `theme_init(THEME_GREEN)` 改为其他主题 |
+| yellow（默认） | `#FFCA73` | `#080C14` |
+| pink | `#FF99CC` | `#0C0814` |
+| orange | `#FFB878` | `#0C0A08` |
+| green / blue / red / purple / cyan | 见 `theme.c` | 见 `theme.c` |
+
+17 个角色：`bg` `clock_on` `clock_off` `text` `accent` `weather` `heart_rate` `steps`
+`battery` `field_lbl` `field_bg` `data_val` `stress` `bodybatt` `notif` `moon` `outline`。
+
+**并非全部在用**：`accent`、`heart_rate`、`steps`、`field_bg`、`outline` 目前没有被
+`watchface.c` 引用；字段标签和 DAWN/DUSK 用的是硬编码的 `#52AAAC`，LED 点阵用的是硬编码的
+`LED_BG_COLOR` / `LED_FG_COLOR`，都不随主题变。这是已知的不一致，要做成主题化时把这些
+硬编码换成角色引用即可。
+
+默认主题在 `watchface_start()` 里写死为 `theme_init(THEME_YELLOW)`。
 
 ---
 
-## 7. LVGL v9 注意事项
+## 7. locale.c — 国际化
 
-项目使用 LVGL v9.5.0，与 v8 有以下重要差异：
+38 个字符串 ID × 中英双语，`locale_get_string(id)` 按 `current_lang` 取。
+**默认语言是 `LANG_ZH`**（`locale.c` 里的 `current_lang` 初值）。
 
-### 7.1 自定义绘制
+覆盖：星期、月份、天气描述（晴/多云/阴/雨/雪/局部多云）、传感器名、日出日落、月相四相、
+语言名。
 
-**v8 方式**（不可用）：
+不走 locale 表的部分：`DAWN:` / `DUSK:` 和三个字段标签（`RECOVERY HRS:` 等）恒为英文——
+它们用的 `lv_font_xsmol` 里没有汉字；中文日期行的"周X"也是在 `watchface.c` 里直接写的。
+
+---
+
+## 8. lunar_calendar.c — 农历与节气
+
 ```c
-lv_obj_set_draw_cb(obj, my_draw_func);
-lv_draw_ctx_t *draw_ctx = lv_draw_get_ctx(lv_obj_get_layer(obj));
+lunar_date_t lunar;
+lunar_calendar_convert(2026, 7, 25, &lunar);
+/* lunar.year_name = "丙午年"  month_name = "六月"  day_name = "初二"  jieqi = "大暑" */
 ```
 
-**v9 方式**（当前项目使用）：
+查表实现，**支持 2026-2056**（超出范围返回空串）：
+
+- `LUNAR_OFFSET_DAYS[383]` — 每个农历月首相对 2026-01-01 的天数偏移
+- `LEAP_MONTH_OFFSETS[11]` — 哪些索引是闰月
+- `SOLAR_TERMS_OFFSETS[744]` — 31 年 × 24 节气
+
+表由 `tools/gen_lunar_tables.py` 用天文历（ephem 朔望 + 太阳黄经过 15° 点）生成，
+`tools/verify_lunar_tables.py` 逐日校验。详见 [LUNAR.md](LUNAR.md)。
+
+月相不走这张表：`watchface.c` 的 `get_moon_phase()` 用儒略日 + 朔望月整数运算独立算，
+精度比参考实现高一个数量级（2026-2056 共 11315 天，偏差 0.6% vs 参考实现的 12.2%）。
+
+---
+
+## 9. main.c — 入口
+
 ```c
-lv_obj_add_event_cb(obj, my_draw_event_cb, LV_EVENT_DRAW_MAIN, NULL);
-// 在回调中：
+main()
+  ├── DEVICE_DT_GET(DT_CHOSEN(zephyr_display)) → display_blanking_off()
+  ├── watchface_start()
+  └── while (1) { lv_timer_handler(); k_msleep(5); }
+```
+
+**两个必须知道的点：**
+
+1. LVGL 由 Zephyr 的 LVGL 模块在 `SYS_INIT`（`INIT_LEVEL_APPLICATION`，早于 `main()`）
+   里初始化完毕——包括 `lv_init()`、创建绑定到 Zephyr display 驱动的显示（含渲染缓冲）、
+   应用默认主题、把 tick 接到 `k_uptime_get_32`。应用层**绝不能**再调
+   `lv_init()` / `lv_display_create()` / `lv_theme_default_init()`，否则会创建第二个没有
+   渲染缓冲的显示并成为默认显示，`lv_timer_handler()` 渲染时直接崩。
+2. Zephyr 的显示默认是 blanked 的，不调 `display_blanking_off()` 的话 native_sim 只会
+   开一个空窗口。
+
+---
+
+## 10. 构建与运行
+
+```bash
+cd ~/zephyr-project && source .venv/bin/activate
+
+# 模拟器
+west build -b native_sim/native/64 -d ~/zephyr-project/native_ui ~/zephyr-project/lgvl_watchUi/app
+west build -t run -d ~/zephyr-project/native_ui
+
+# 真机
+west build -b xiao_ble/nrf52840/sense -d ~/zephyr-project/xiao_build ~/zephyr-project/lgvl_watchUi/app
+west flash -d ~/zephyr-project/xiao_build
+```
+
+板级配置文件名必须与 board 名对应（`/` 换成 `_`）：`native_sim/native/64` →
+`boards/native_sim_native_64.conf`，`xiao_ble/nrf52840/sense` →
+`boards/xiao_ble_nrf52840_sense.conf`。名字对不上的话 Zephyr 会**静默忽略**该文件。
+
+---
+
+## 11. 常见修改指南
+
+| 想做什么 | 改哪 | 改什么 |
+|---|---|---|
+| 调整某一行的位置 | `watchface.c` 顶部 | 对应的坐标宏；越界会被 `BUILD_ASSERT` 挡下 |
+| 时钟变大/变小 | `watchface.c` + 字体 | `COL_W`/`COLON_W`/`CLOCK_H` 要与 `segments80` 字形尺寸匹配 |
+| 改颜色 | `theme.c` | 对应主题的 `theme_colors_t` 字段（注意 §6 的硬编码色） |
+| 加主题 | `theme.h` + `theme.c` | 枚举与数组**同时**加，顺序必须一致 |
+| 加图标 | `tools/gen_font.py` + `watchface.c` | 从 `icons.png` 多提一个字形，再加 `icon_slot_t` 分支 |
+| 加中文字符 | `gen_cjk_font.py` | 加进 `CHAR_GROUPS` 重新生成；不加就是空心方框 |
+| 加新字符串 | `locale.h/c` | 枚举 + 中英两张表同步加 |
+| 接真实传感器 | `watchface.c` | 替换 `sim_update_data()` / `sim_update_weather()` |
+| 接按键切换 | `watchface.c` | 把 `watchface_switch_*()` 挂到输入事件上 |
+| 调 LVGL 内存 | `prj.conf` | `CONFIG_LV_Z_MEM_POOL_SIZE`（当前 64 KB，余量很薄，见 DEVELOPMENT.md §6） |
+
+---
+
+## 12. LVGL v9 注意事项
+
+项目用 LVGL v9.5.0，与网上大量 v8 教程的差异：
+
+```c
+/* 自定义绘制：v8 的 lv_obj_set_draw_cb / lv_draw_get_ctx 都没了 */
+lv_obj_add_event_cb(obj, cb, LV_EVENT_DRAW_MAIN, NULL);
 lv_layer_t *layer = lv_event_get_layer(e);
 lv_draw_rect(layer, &dsc, &area);
-```
 
-### 7.2 颜色/样式 API
+/* 样式读取直接返回值，不是出参 */
+lv_color_t c = lv_obj_get_style_bg_color(obj, LV_PART_MAIN);
 
-**v9 中** `lv_obj_get_style_bg_color()` 直接返回颜色，不需要传指针：
-```c
-lv_color_t color = lv_obj_get_style_bg_color(obj, LV_PART_MAIN);  // 正确
-lv_obj_get_style_bg_color(obj, LV_PART_MAIN, &color);            // 错误，参数过多
-```
-
-### 7.3 文字绘制函数签名
-
-**v9 中** `lv_draw_label()` 只有 3 个参数，文字在 dsc.text 中：
-```c
+/* 文字绘制只有 3 个参数，文字在 dsc.text 里 */
 dsc.text = "hello";
 lv_draw_label(layer, &dsc, &coords);
 ```
 
----
-
-## 8. 所见即所得 IDE 推荐
-
-### 8.1 SquareLine Studio（推荐）
-
-- **官网**：https://squareline.io
-- LVGL 官方推荐的可视化设计器
-- 拖拽控件、设置样式、导出 C 代码
-- 免费版支持基础功能，专业版支持更多控件
-- **限制**：导出的代码是通用 LVGL 代码，需要手动适配 Zephyr 集成
-- **注意**：自定义绘制的数码管和图标无法用 SquareLine 生成
-
-### 8.2 VS Code + LVGL 插件
-
-- 项目已有 `.vscode/` 和 `.clangd` 配置
-- 安装 "LVGL" 扩展可获得代码高亮和基本预览
-- 配合 clangd 做代码补全
-
-### 8.3 NXP GUI Guider
-
-- 免费，NXP 出品
-- 基于 LVGL 的可视化设计器
-- 导出 C 代码可用
-- **限制**：偏 NXP 平台，需要手动调整适配
-
-### 8.4 在线模拟器
-
-- **LVGL Online Editor**: https://sim.lvgl.io
-- 浏览器中写 LVGL 代码，即时预览
-- 适合快速试验 UI 效果
-- 不适合完整项目开发
-
-### 推荐工作流
-
-> **SquareLine Studio** 做布局原型设计 → 导出 C 代码 → 手动集成到 Zephyr 项目中
-
-数码管时钟（segment34）和像素图标（icons）是自定义绘制，SquareLine 无法生成，只能手写。
+自绘曾经在这个项目里坑过一次：旧的 `icons.c` 把**局部坐标**当层坐标传给 `lv_draw_rect()`，
+像素全落到屏幕左上角又被裁到对象自己的范围里，结果一个点都没画出来过——而且不报错。
+现在整套图标改成了字体 + label，重绘抑制、换色、裁剪全是现成的。
 
 ---
 
-## 9. 参考项目对比
+## 13. 与参考项目的对应关系
 
-参考项目 `Segment34.CN` 是 Garmin Connect IQ 表盘，使用 Monkey C 语言。
+`Segment34.CN` 是 Garmin Connect IQ 表盘（Monkey C），资源不能直接复用，但资源**文件**
+（`.fnt` + `.png`）可以转换：
 
-| 维度 | 参考项目（Garmin） | 本项目（Zephyr） |
+| 维度 | 参考项目 | 本项目 |
 |---|---|---|
-| 平台 | Garmin Connect IQ | Zephyr RTOS + LVGL |
-| 语言 | Monkey C | C |
-| 大时钟 | segments80narrow 专用位图字体 | 代码绘制 7 段数码管 |
-| 数据字体 | led / led_small 专用字体 | Montserrat 标准字体 |
-| 图标 | icons / moon 位图字体 | 代码绘制像素图标 |
-| 表圈刻度 | 代码绘制 | 未实现（可补） |
-| 渐变效果 | gradient.png 图片叠加 | 未实现 |
-| 资源格式 | .fnt + .png 位图字体 | LVGL 字体结构 + 代码绘制 |
+| 平台 / 语言 | Connect IQ / Monkey C | Zephyr + LVGL / C |
+| 大时钟 | `segments80narrow` 位图字体 | 同一份 `.fnt`+`.png` 转成 `lv_font_segments80` |
+| 数值 | `led` / `led_small` 字体 | `lv_font_led`（同源转换） |
+| 图标 / 月相 | `icons` / `moon` 位图字体 | `lv_font_icons` / `lv_font_moon`（同源转换） |
+| 小标签 | `xsmol` | `lv_font_xsmol`（同源转换） |
+| 天气行拼法 | `joinFour()`，`", "` 分隔 | 同 |
+| 风向箭头 | `getWind()` 量化成 8 方位 → `'a'`-`'h'` | 同算法，字形换成 Unicode 箭头 |
+| 图标状态机 | `getIconState()` | `icon_slot_glyph()` |
+| 5/4 死星彩蛋 | `moonPhase()` 里返回 `"8"` | 同（仅图片模式） |
+| 表圈刻度 / 渐变叠加 | 有 | **未实现** |
 
-两者平台完全不同，资源不可直接复用，需要在 LVGL 框架下重新实现等价效果。
+源资源路径：`~/zephyr-project/Segment34.CN/resources/fonts/`。
 
-python scripts/bmfont2lvgl.py lv_font_segments80 "C:\zheng\github\zarek\Segment34.CN-master\resources\fonts\segments80narrow.fnt" "~/zephyr-project/Segment34.CN/resources/fonts/segments80.png" src/fonts/lv_font_segments80.c
+---
+
+## 14. 已知缺口
+
+- 传感器、天气、闹钟、蓝牙状态**全是模拟值**
+- 时间来自 `time(NULL)`，真机上未接 RTC
+- 无输入事件绑定，切换函数只能从代码调用
+- 无低功耗（`CONFIG_PM` 未开）、无背光控制
+- 农历表只到 2056 年
+- 部分主题颜色角色未被使用（见 §6）
+- 表圈刻度、渐变叠加未实现
