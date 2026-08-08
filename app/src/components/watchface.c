@@ -382,7 +382,8 @@ static lv_obj_t *bottom5_bg_labels[BOTTOM5_DIGITS];
 static lv_obj_t *bottom5_val_labels[BOTTOM5_DIGITS];
 
 static lv_obj_t *battery_container = NULL;
-static lv_obj_t *battery_fill = NULL;
+static lv_obj_t *battery_bar_label = NULL;    /* 字符条（| 实心 / { 空心），同 Segment34.CN battFull/battEmpty */
+static lv_obj_t *battery_cap_obj = NULL;      /* 电池正极头（mode=0 时一并隐藏） */
 static lv_obj_t *battery_label = NULL;        /* 数字标签（电池左侧，无%） */
 static lv_obj_t *battery_percent_label = NULL; /* 数字标签（电池右侧，带%） */
 static int battery_display_mode = 0;           /* 0=不显示, 1=左侧显示, 2=右侧显示% */
@@ -957,18 +958,21 @@ void watchface_start(void)
     lv_obj_set_style_border_color(battery_container, (lv_color_t)LV_COLOR_MAKE(0xa0, 0xa0, 0xa0), LV_PART_MAIN);
     lv_obj_set_style_radius(battery_container, 2, LV_PART_MAIN);
     lv_obj_set_style_pad_all(battery_container, 0, LV_PART_MAIN);
-    
-    battery_fill = lv_obj_create(battery_container);
-    /* Fill height = content_h - 2*gap = (battery_h - 2*border) - 2*gap
-     * = (12 - 2) - 4 = 6, so 2px gaps on top AND bottom (vertically centered) */
-    lv_obj_set_height(battery_fill, battery_h - 6);
-    lv_obj_set_width(battery_fill, 0);
-    lv_obj_set_pos(battery_fill, 2, 2);
-    lv_obj_set_style_bg_color(battery_fill, colors->battery, LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(battery_fill, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_radius(battery_fill, 0, LV_PART_MAIN);
-    lv_obj_set_style_pad_all(battery_fill, 0, LV_PART_MAIN);
-    
+
+    /* 字符条：用 '|'（实心段）+ '{'（空心段）拼成填充条，同 Segment34.CN 的 battFull/battEmpty 逻辑。
+     * lv_font_xsmol 中 '|' 是 1×7px 实心竖线，'{' 是 1×8px 全空（透明）；
+     * 20 个字符正好填满电池容器 20px 内容宽。 */
+    battery_bar_label = lv_label_create(battery_container);
+    lv_label_set_text(battery_bar_label, "");
+    lv_obj_set_style_text_font(battery_bar_label, &lv_font_xsmol, LV_PART_MAIN);
+    lv_obj_set_style_text_color(battery_bar_label, colors->battery, LV_PART_MAIN);
+    lv_obj_set_style_text_align(battery_bar_label, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(battery_bar_label, 0, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(battery_bar_label, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_pos(battery_bar_label, 2, 2);
+    lv_obj_set_size(battery_bar_label, 20, battery_h);
+    lv_label_set_long_mode(battery_bar_label, LV_LABEL_LONG_CLIP);
+
     /* 电池左侧数字标签（模式1，无%，永远在黑色背景上，清晰可读）
      * x = battery_x - gap - width = (CENTER_X-12) - 4 - 20 = 84 */
     battery_label = lv_label_create(root_page);
@@ -991,14 +995,14 @@ void watchface_start(void)
     lv_obj_set_pos(battery_percent_label, CENTER_X + battery_w / 2 + 5, battery_y + 2);
     lv_obj_add_flag(battery_percent_label, LV_OBJ_FLAG_HIDDEN);
 
-    /* Battery cap */
-    lv_obj_t *battery_cap = lv_obj_create(root_page);
-    lv_obj_set_size(battery_cap, 3, 6);
-    lv_obj_set_pos(battery_cap, CENTER_X + battery_w / 2, battery_y + 3);
-    lv_obj_set_style_bg_color(battery_cap, (lv_color_t)LV_COLOR_MAKE(0xa0, 0xa0, 0xa0), LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(battery_cap, LV_OPA_COVER, LV_PART_MAIN);
-    lv_obj_set_style_radius(battery_cap, 1, LV_PART_MAIN);
-    lv_obj_set_style_border_width(battery_cap, 0, LV_PART_MAIN);
+    /* Battery cap (mode 0 时一并隐藏) */
+    battery_cap_obj = lv_obj_create(root_page);
+    lv_obj_set_size(battery_cap_obj, 3, 6);
+    lv_obj_set_pos(battery_cap_obj, CENTER_X + battery_w / 2, battery_y + 3);
+    lv_obj_set_style_bg_color(battery_cap_obj, (lv_color_t)LV_COLOR_MAKE(0xa0, 0xa0, 0xa0), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(battery_cap_obj, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_radius(battery_cap_obj, 1, LV_PART_MAIN);
+    lv_obj_set_style_border_width(battery_cap_obj, 0, LV_PART_MAIN);
 
     watchface_update_time();
     printk("watchface_start: time updated\n");
@@ -1247,58 +1251,71 @@ void watchface_update_weather(void)
 
 void watchface_update_battery(void)
 {
-    if (!battery_fill) return;
-    /* battery_level temporary */
-    {
-        int battery_level = sim_battery;
-        if (battery_level < 0) battery_level = 0;
-        if (battery_level > 100) battery_level = 100;
+    if (!battery_container || !battery_bar_label) return;
 
-        /* Fill width proportional to battery level (max 20px inside 24px container) */
-        int fill_w = (battery_level * 20) / 100;
-        if (fill_w < 1 && battery_level > 0) fill_w = 1;
+    if (battery_display_mode == 0) {
+        /* 模式 0：完全隐藏（外框/正极头/标签），同 Segment34.CN variant=2 */
+        lv_obj_add_flag(battery_container,    LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(battery_cap_obj,      LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(battery_label,        LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(battery_percent_label, LV_OBJ_FLAG_HIDDEN);
+        return;
+    }
 
-        lv_obj_set_width(battery_fill, fill_w);
+    /* 模式 1/2/3：显示电池图标 + 字符填充条 */
+    lv_obj_clear_flag(battery_container, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(battery_cap_obj,   LV_OBJ_FLAG_HIDDEN);
 
-        /* Color: red for 1-10%, green for 90-100%, white otherwise */
-        if (battery_level <= 10) {
-            lv_obj_set_style_bg_color(battery_fill, (lv_color_t)LV_COLOR_MAKE(0xff, 0x00, 0x00), LV_PART_MAIN);
-        } else if (battery_level >= 90) {
-            lv_obj_set_style_bg_color(battery_fill, (lv_color_t)LV_COLOR_MAKE(0x00, 0xff, 0x00), LV_PART_MAIN);
-        } else {
-            lv_obj_set_style_bg_color(battery_fill, (lv_color_t)LV_COLOR_MAKE(0xff, 0xff, 0xff), LV_PART_MAIN);
-        }
+    int battery_level = sim_battery;
+    if (battery_level < 0)   battery_level = 0;
+    if (battery_level > 100) battery_level = 100;
 
-        /* Always show gray border (including 90-100%) */
-        lv_obj_set_style_border_width(battery_container, 1, LV_PART_MAIN);
+    /* 字符填充条：fill_count 个 '|' + (20-fill_count) 个 '{'
+     * 同 Segment34.CN getBattData() variant=3 逻辑（20格，小屏版） */
+    int fill_count = (battery_level * 20) / 100;
+    if (fill_count < 1 && battery_level > 0) fill_count = 1;
 
-        /* Percentage display mode: 0=hidden, 1=left side no%, 2=right side with% */
-        if (battery_display_mode == 1) {
-            /* 左侧：纯数字无%，永远在黑色背景上，低电量红色 */
-            char percent_str[4];
-            snprintf(percent_str, sizeof(percent_str), "%d", battery_level);
-            label_set_text(battery_label, percent_str);
-            lv_color_t text_color = (battery_level <= 20)
-                ? (lv_color_t)LV_COLOR_MAKE(0xFF, 0x33, 0x33)
-                : theme_get_colors()->data_val;
-            lv_obj_set_style_text_color(battery_label, text_color, LV_PART_MAIN);
-            lv_obj_clear_flag(battery_label, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_add_flag(battery_percent_label, LV_OBJ_FLAG_HIDDEN);
-        } else if (battery_display_mode == 2) {
-            /* 右侧：数字+%，低电量红色 */
-            char percent_str[5];
-            snprintf(percent_str, sizeof(percent_str), "%d%%", battery_level);
-            label_set_text(battery_percent_label, percent_str);
-            lv_color_t text_color = (battery_level <= 20)
-                ? (lv_color_t)LV_COLOR_MAKE(0xFF, 0x33, 0x33)
-                : theme_get_colors()->data_val;
-            lv_obj_set_style_text_color(battery_percent_label, text_color, LV_PART_MAIN);
-            lv_obj_clear_flag(battery_percent_label, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_add_flag(battery_label, LV_OBJ_FLAG_HIDDEN);
-        } else {
-            lv_obj_add_flag(battery_label, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_add_flag(battery_percent_label, LV_OBJ_FLAG_HIDDEN);
-        }
+    char bar_str[21];
+    memset(bar_str,              '|', (size_t)fill_count);
+    memset(bar_str + fill_count, '{', (size_t)(20 - fill_count));
+    bar_str[20] = '\0';
+    label_set_text(battery_bar_label, bar_str);
+
+    /* 颜色：≤10% 红，≥90% 绿，其他白 */
+    lv_color_t bar_color;
+    if (battery_level <= 10) {
+        bar_color = (lv_color_t)LV_COLOR_MAKE(0xff, 0x00, 0x00);
+    } else if (battery_level >= 90) {
+        bar_color = (lv_color_t)LV_COLOR_MAKE(0x00, 0xff, 0x00);
+    } else {
+        bar_color = (lv_color_t)LV_COLOR_MAKE(0xff, 0xff, 0xff);
+    }
+    lv_obj_set_style_text_color(battery_bar_label, bar_color, LV_PART_MAIN);
+
+    lv_color_t num_color = (battery_level <= 20)
+        ? (lv_color_t)LV_COLOR_MAKE(0xFF, 0x33, 0x33)
+        : theme_get_colors()->data_val;
+
+    if (battery_display_mode == 1) {
+        /* 左侧数字，无 % */
+        char s[4];
+        snprintf(s, sizeof(s), "%d", battery_level);
+        label_set_text(battery_label, s);
+        lv_obj_set_style_text_color(battery_label, num_color, LV_PART_MAIN);
+        lv_obj_clear_flag(battery_label, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(battery_percent_label, LV_OBJ_FLAG_HIDDEN);
+    } else if (battery_display_mode == 2) {
+        /* 右侧数字，带 % */
+        char s[5];
+        snprintf(s, sizeof(s), "%d%%", battery_level);
+        label_set_text(battery_percent_label, s);
+        lv_obj_set_style_text_color(battery_percent_label, num_color, LV_PART_MAIN);
+        lv_obj_clear_flag(battery_percent_label, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(battery_label, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        /* 模式 3：仅字符条，不显示数字 */
+        lv_obj_add_flag(battery_label,        LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(battery_percent_label, LV_OBJ_FLAG_HIDDEN);
     }
 }
 
