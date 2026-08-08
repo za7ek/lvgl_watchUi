@@ -972,7 +972,7 @@ void watchface_start(void)
     battery_label = lv_label_create(battery_container);
     lv_label_set_text(battery_label, "");
     lv_obj_set_style_text_font(battery_label, &lv_font_montserrat_8, LV_PART_MAIN);
-    lv_obj_set_style_text_color(battery_label, (lv_color_t)LV_COLOR_MAKE(0x00, 0x00, 0x00), LV_PART_MAIN);
+    lv_obj_set_style_text_color(battery_label, (lv_color_t)LV_COLOR_MAKE(0xFF, 0xFF, 0xFF), LV_PART_MAIN);
     lv_obj_set_style_text_align(battery_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
     lv_obj_set_style_pad_all(battery_label, 0, LV_PART_MAIN);
     lv_obj_set_size(battery_label, battery_w, battery_h);
