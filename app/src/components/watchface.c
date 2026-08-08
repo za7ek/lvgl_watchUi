@@ -1271,17 +1271,24 @@ void watchface_update_battery(void)
         lv_obj_set_style_border_width(battery_container, 1, LV_PART_MAIN);
 
         /* Percentage display mode: 0=hidden, 1=inside battery, 2=outside battery */
-        char percent_str[4];
-        snprintf(percent_str, sizeof(percent_str), "%d", battery_level);
-
         if (battery_display_mode == 1) {
-            /* Inside: show label inside battery container */
+            /* Inside: number only, no % sign (limited space inside 24×12px battery) */
+            char percent_str[4];
+            snprintf(percent_str, sizeof(percent_str), "%d", battery_level);
             label_set_text(battery_label, percent_str);
             lv_obj_clear_flag(battery_label, LV_OBJ_FLAG_HIDDEN);
             lv_obj_add_flag(battery_percent_label, LV_OBJ_FLAG_HIDDEN);
         } else if (battery_display_mode == 2) {
-            /* Outside: show label to the right of battery */
+            /* Outside: number with % sign, red text on low battery (<= 20%) */
+            char percent_str[5];
+            snprintf(percent_str, sizeof(percent_str), "%d%%", battery_level);
             label_set_text(battery_percent_label, percent_str);
+
+            lv_color_t text_color = (battery_level <= 20)
+                ? (lv_color_t)LV_COLOR_MAKE(0xFF, 0x33, 0x33)  /* Red warning */
+                : theme_get_colors()->data_val;                 /* Normal color */
+            lv_obj_set_style_text_color(battery_percent_label, text_color, LV_PART_MAIN);
+
             lv_obj_clear_flag(battery_percent_label, LV_OBJ_FLAG_HIDDEN);
             lv_obj_add_flag(battery_label, LV_OBJ_FLAG_HIDDEN);
         } else {
