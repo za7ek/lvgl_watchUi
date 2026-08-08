@@ -590,19 +590,21 @@ static void led_field_set_value(lv_obj_t **bg_labels, lv_obj_t **val_labels,
 
 static const char *get_moon_string(int phase)
 {
-    /* 8 阶段映射到 4 个文字标签（每 2 个阶段归一组） */
-    static const locale_str_id_t moon_ids[] = {
-        LOCALE_STR_MOON_NEW,       /* phase 0: 新月 */
-        LOCALE_STR_MOON_NEW,       /* phase 1: 蛾眉月 */
-        LOCALE_STR_MOON_FIRST_Q,   /* phase 2: 上弦月 */
-        LOCALE_STR_MOON_FIRST_Q,   /* phase 3: 盈凸月 */
-        LOCALE_STR_MOON_FULL,      /* phase 4: 满月 */
-        LOCALE_STR_MOON_FULL,      /* phase 5: 亏凸月 */
-        LOCALE_STR_MOON_THIRD_Q,  /* phase 6: 下弦月 */
-        LOCALE_STR_MOON_THIRD_Q,  /* phase 7: 残月 */
+    /* 文字模式月相名称固定用英文：FONT_MOON 是 montserrat_8，不含汉字，
+     * 中文模式下走 locale 会拿到中文字符串并显示成方框。
+     * 4 个标签对应 8 个阶段，每 2 个阶段归一组。 */
+    static const char * const moon_en[] = {
+        "NEW",   /* phase 0 */
+        "NEW",   /* phase 1 */
+        "1QTR",  /* phase 2 */
+        "1QTR",  /* phase 3 */
+        "FULL",  /* phase 4 */
+        "FULL",  /* phase 5 */
+        "3QTR",  /* phase 6 */
+        "3QTR",  /* phase 7 */
     };
     if (phase >= 0 && phase < 8) {
-        return locale_get_string(moon_ids[phase]);
+        return moon_en[phase];
     }
     return "";
 }
