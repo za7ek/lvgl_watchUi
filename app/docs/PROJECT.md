@@ -45,6 +45,7 @@ lgvl_watchUi/
 │       ├── main.c              # 入口：解除 blanking + LVGL 主循环
 │       ├── components/
 │       │   ├── watchface.c/h   # 表盘全部 UI：布局、渲染分层、缓存、定时器、状态输入
+│       │   ├── settings.c/h    # 运行时设置面板（语言/主题/月相/电池，LVGL overlay）
 │       │   └── lunar_calendar.c/h  # 公历→农历/节气（查表，2026-2056）
 │       ├── locale/locale.c/h   # 中英双语字符串表
 │       ├── theme/theme.c/h     # 8 套主题 × 17 个颜色角色
@@ -205,7 +206,47 @@ void watchface_switch_battery_display(void); /* 不显示 → 内部 → 外部 
 void watchface_switch_moon_display(void);    /* 文字 ↔ 图片 */
 ```
 
-这些 `switch_*` 目前**没有绑定任何输入事件**，只能从代码里调用。接按键/触摸时在这里挂。
+这些 `switch_*` 由 `settings.c` 的设置面板按钮调用；也可以在 GPIO 按钮回调里直接调用（见 §4.8）。
+
+### 4.8 settings.c — 运行时设置面板
+
+LVGL overlay，挂在所有表盘内容之上，默认隐藏。
+
+**触发方式**
+
+- native_sim：在表盘上按住鼠标左键 **3 秒**弹出面板
+- 真机（无触摸屏）：在 `main.c` GPIO 回调里调 `settings_show()`
+
+**实现要点**
+
+```
+z-order（高→低）
+─────────────────────────────────
+s_panel（设置面板）         ← settings_init() 最后创建，始终最高
+─────────────────────────────────
+input_layer（全屏透明层）   ← 捕获长按/短按，不干扰表盘显示
+─────────────────────────────────
+root_page（表盘内容）
+```
+
+透明 `input_layer` 是必要的：`root_page` 的子对象（`clock_bg`、bar 等由 `lv_obj_create` 生成）
+默认带 `LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE`，会吞掉事件；独立的透明层绕开这个问题。
+
+长按阈值通过 `lv_indev_set_long_press_time(indev, 3000)` 统一设置（遍历所有已注册输入设备）。
+长按松手不触发关闭，因为关闭用的是 `LV_EVENT_SHORT_CLICKED`（只在 < 3s 的短按结束时触发）。
+
+**公开 API**
+
+```c
+void settings_init(void);       /* watchface_start() 末尾调一次 */
+void settings_show(void);       /* 弹出面板 + 启动15s自动关闭计时器 */
+void settings_hide(void);       /* 关闭面板 */
+bool settings_is_visible(void);
+```
+
+**native_sim SDL 输入前提**（`boards/native_sim_native_64`）：
+- `CONFIG_INPUT=y` + `CONFIG_INPUT_SDL_TOUCH=y` + `CONFIG_LV_Z_POINTER_INPUT=y`
+- overlay 中加 `zephyr,input-sdl-touch` 和 `zephyr,lvgl-pointer-input` 两个 DT 节点
 
 ### 4.6 状态图标位
 
@@ -384,7 +425,7 @@ west flash -d ~/zephyr-project/xiao_build
 | 加中文字符 | `gen_cjk_font.py` | 加进 `CHAR_GROUPS` 重新生成；不加就是空心方框 |
 | 加新字符串 | `locale.h/c` | 枚举 + 中英两张表同步加 |
 | 接真实传感器 | `watchface.c` | 替换 `sim_update_data()` / `sim_update_weather()` |
-| 接按键切换 | `watchface.c` | 把 `watchface_switch_*()` 挂到输入事件上 |
+| 接按键切换设置 | `main.c` + GPIO | 在 GPIO 中断回调里调 `settings_show()`，见 §4.8 |
 | 调 LVGL 内存 | `prj.conf` | `CONFIG_LV_Z_MEM_POOL_SIZE`（当前 64 KB，余量很薄，见 DEVELOPMENT.md §6） |
 
 ---
@@ -439,7 +480,7 @@ lv_draw_label(layer, &dsc, &coords);
 
 - 传感器、天气、闹钟、蓝牙状态**全是模拟值**
 - 时间来自 `time(NULL)`，真机上未接 RTC
-- 无输入事件绑定，切换函数只能从代码调用
+- 真机按键未接入（GPIO 回调调 `settings_show()` 的代码已预留，见 §4.8）
 - 无低功耗（`CONFIG_PM` 未开）、无背光控制
 - 农历表只到 2056 年
 - 部分主题颜色角色未被使用（见 §6）

@@ -12,6 +12,7 @@
 #include "lv_font_xsmol.h"
 #include "lv_font_moon.h"
 #include "lv_font_icons.h"
+#include "settings.h"
 #include <lvgl.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
@@ -665,6 +666,22 @@ static void sensor_update_cb(lv_timer_t *timer)
     ARG_UNUSED(timer);
 }
 
+/* 长按表盘触发设置面板 */
+static void watchface_long_press_cb(lv_event_t *e)
+{
+    ARG_UNUSED(e);
+    settings_show();
+}
+
+/* 短按（< 3s）：若设置面板可见则关闭 */
+static void watchface_click_cb(lv_event_t *e)
+{
+    ARG_UNUSED(e);
+    if (settings_is_visible()) {
+        settings_hide();
+    }
+}
+
 void watchface_start(void)
 {
     theme_init(THEME_YELLOW);
@@ -991,6 +1008,44 @@ void watchface_start(void)
     time_timer = lv_timer_create(time_update_cb, 1000, NULL);
     sensor_timer = lv_timer_create(sensor_update_cb, 10000, NULL);
     printk("watchface_start: timers created, done\n");
+
+    /* 透明输入捕获层：全屏覆盖表盘内容，专门接收长按/点击事件。
+     *
+     * 为什么不直接在 root_page 上注册：root_page 的子对象（clock_bg、bar 等
+     * 由 lv_obj_create 生成）默认同时带有 LV_OBJ_FLAG_CLICKABLE 和
+     * LV_OBJ_FLAG_SCROLLABLE，LVGL 把事件派发给最上层命中的子对象后不会
+     * 自动冒泡到 root_page，导致长按永远到不了 root_page。
+     *
+     * 透明层叠在所有表盘内容之上（z-order 最高），自己没有可滚动子对象，
+     * 因此 LV_EVENT_LONG_PRESSED 能可靠触发。settings_init() 在此之后调用，
+     * 面板对象的 z-order 更高，点击面板按钮时不会被本层拦截。
+     *
+     * native_sim：鼠标按住不动约 400ms 即触发。
+     * 真机（无触摸屏）：在 main.c 的 GPIO 回调里直接调 settings_show()，
+     *                    不依赖这个透明层。 */
+    lv_obj_t *input_layer = lv_obj_create(lv_scr_act());
+    lv_obj_set_size(input_layer, SCREEN_W, SCREEN_H);
+    lv_obj_center(input_layer);
+    lv_obj_set_style_bg_opa(input_layer,     LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_border_width(input_layer, 0,           LV_PART_MAIN);
+    lv_obj_set_style_pad_all(input_layer,    0,             LV_PART_MAIN);
+    lv_obj_set_style_radius(input_layer,     0,             LV_PART_MAIN);
+    lv_obj_clear_flag(input_layer, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(input_layer,   LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_event_cb(input_layer, watchface_long_press_cb, LV_EVENT_LONG_PRESSED,  NULL);
+    lv_obj_add_event_cb(input_layer, watchface_click_cb,      LV_EVENT_SHORT_CLICKED, NULL);
+
+    /* 长按阈值改为 5000ms：遍历所有已注册的输入设备统一设置。
+     * LVGL 的指针设备由 Zephyr LVGL 模块在 SYS_INIT 里创建，
+     * 这里 watchface_start() 在 main() 里调用，设备已就绪。 */
+    lv_indev_t *indev = lv_indev_get_next(NULL);
+    while (indev != NULL) {
+        lv_indev_set_long_press_time(indev, 3000);
+        indev = lv_indev_get_next(indev);
+    }
+
+    settings_init();
+    printk("watchface_start: settings initialized\n");
 }
 
 void watchface_stop(void)

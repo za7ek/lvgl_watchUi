@@ -116,6 +116,20 @@ CONFIG_DISPLAY=y
 LVGL 申请不到内存时给一句明确断言，而不是让 `lv_draw_label.c` 拿着 NULL 往下写
 （表现为莫名其妙的段错误）。
 
+**SDL 鼠标输入**（运行时设置面板的前提）：
+```ini
+CONFIG_INPUT=y
+CONFIG_INPUT_SDL_TOUCH=y      # Zephyr SDL 触摸/鼠标输入驱动
+CONFIG_LV_Z_POINTER_INPUT=y   # LVGL 从 DT 的 lvgl-pointer-input 节点读指针事件
+```
+对应 overlay 里需要两个 DT 节点（见 PROJECT.md §4.8）：
+```dts
+input_sdl_touch: input-sdl-touch { compatible = "zephyr,input-sdl-touch"; display = <&sdl_dc>; };
+lvgl_pointer { compatible = "zephyr,lvgl-pointer-input"; input = <&input_sdl_touch>; display = <&sdl_dc>; };
+```
+**漏掉这些配置的现象**：SDL 窗口打开正常，但鼠标点击/长按没有任何反应，日志里
+`sdl_input: Init 'input-sdl-touch' device` 这行不出现。
+
 overlay 把 SDL 显示强制成 240×240，保证布局和缓冲尺寸在模拟器里就按真实分辨率验证。
 
 ### 3.3 xiao_ble_nrf52840_sense.conf / .overlay
@@ -335,7 +349,25 @@ minicom -D /dev/ttyACM0 -b 115200
 ```
 
 `watchface_start()` 里有一串 `printk()` 进度打点（`theme initialized` → `clock created`
-→ … → `timers created, done`）。启动崩溃时看它停在哪一句，就知道是哪一步炸的。
+→ … → `settings initialized`）。启动崩溃时看它停在哪一句，就知道是哪一步炸的。
+
+### 7.6 运行时设置面板
+
+设置面板（`settings.c`）在运行时切换语言/主题/月相/电池显示，不需要重新编译。
+
+**native_sim 操作**：在 SDL 窗口内按住鼠标左键 **3 秒** → 面板弹出 → 点击对应按钮 →
+短按面板外区域或等 **15 秒** 无操作后自动关闭。
+
+**真机接入**：目前 GPIO 按钮代码未写入，在 `main.c` 的 GPIO 中断回调里调
+`settings_show()` 即可；`settings.h` 已经公开该 API。
+
+**常见问题**
+
+| 现象 | 原因 | 解决 |
+|---|---|---|
+| 长按无反应 | SDL 鼠标驱动未启用 | 见 §3.2，确认 `CONFIG_INPUT_SDL_TOUCH=y` 和 DT 节点 |
+| 松手面板立即消失 | 长按松手触发了 CLICKED | 已修复：关闭用 `LV_EVENT_SHORT_CLICKED`，不触发于长按松手 |
+| 面板按钮文字乱码 | 默认字体不含汉字 | 已修复：按钮标签改为纯英文 |
 
 ---
 
@@ -392,3 +424,4 @@ LED 字体的 `glyph_id_start` 基数没改对，见 FONTS.md §5.3 末尾的校
 | v1.3 | 2026-08-01 | 月相图片字体；农历/节气表扩到 2026-2056 |
 | v1.4 | 2026-08-05 | 中文显示修复（UTF-8 + CJK 字体）；分级缓存减少 85% 重绘；布局收进圆形可视区 |
 | v1.5 | 2026-08-06 | 天气行加风向/湿度/降水概率；步数行两侧加状态图标位 |
+| v1.6 | 2026-08-07 | 运行时设置面板（settings.c）：长按3s弹出，支持语言/主题/月相/电池切换；native_sim SDL鼠标输入接入 |

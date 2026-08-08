@@ -6,6 +6,7 @@ project(segment34_watch)
 target_sources(app PRIVATE
     src/main.c
     src/components/watchface.c
+    src/components/settings.c
     src/components/lunar_calendar.c
     src/locale/locale.c
     src/theme/theme.c
