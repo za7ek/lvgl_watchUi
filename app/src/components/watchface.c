@@ -383,11 +383,9 @@ static lv_obj_t *bottom5_val_labels[BOTTOM5_DIGITS];
 
 static lv_obj_t *battery_container = NULL;
 static lv_obj_t *battery_fill = NULL;
-static lv_obj_t *battery_label = NULL;        /* 内部白色底层文字（空白区可见） */
-static lv_obj_t *battery_clip = NULL;         /* 裁剪容器，宽度跟随填充条 */
-static lv_obj_t *battery_label_filled = NULL; /* 内部黑色文字（填充区可见，被clip裁剪） */
-static lv_obj_t *battery_percent_label = NULL; /* 百分比标签（电池外部） */
-static int battery_display_mode = 0;           /* 0=不显示, 1=内部显示, 2=外部显示 */
+static lv_obj_t *battery_label = NULL;        /* 数字标签（电池左侧，无%） */
+static lv_obj_t *battery_percent_label = NULL; /* 数字标签（电池右侧，带%） */
+static int battery_display_mode = 0;           /* 0=不显示, 1=左侧显示, 2=右侧显示% */
 static int moon_display_mode = 1;              /* 0=显示文字, 1=显示图片（默认图片） */
 
 static lv_obj_t *stress_bar = NULL;
@@ -971,39 +969,17 @@ void watchface_start(void)
     lv_obj_set_style_radius(battery_fill, 0, LV_PART_MAIN);
     lv_obj_set_style_pad_all(battery_fill, 0, LV_PART_MAIN);
     
-    battery_label = lv_label_create(battery_container);
+    /* 电池左侧数字标签（模式1，无%，永远在黑色背景上，清晰可读）
+     * x = battery_x - gap - width = (CENTER_X-12) - 4 - 20 = 84 */
+    battery_label = lv_label_create(root_page);
     lv_label_set_text(battery_label, "");
     lv_obj_set_style_text_font(battery_label, &lv_font_montserrat_8, LV_PART_MAIN);
-    lv_obj_set_style_text_color(battery_label, (lv_color_t)LV_COLOR_MAKE(0xFF, 0xFF, 0xFF), LV_PART_MAIN);
-    lv_obj_set_style_text_align(battery_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+    lv_obj_set_style_text_color(battery_label, colors->data_val, LV_PART_MAIN);
+    lv_obj_set_style_text_align(battery_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
     lv_obj_set_style_pad_all(battery_label, 0, LV_PART_MAIN);
-    lv_obj_set_size(battery_label, battery_w, battery_h);
-    lv_obj_set_style_bg_opa(battery_label, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_pos(battery_label, CENTER_X - battery_w / 2 - 4 - 20, battery_y + 2);
+    lv_obj_set_width(battery_label, 20);
     lv_obj_add_flag(battery_label, LV_OBJ_FLAG_HIDDEN);
-
-    /* 裁剪容器：宽度随填充条动态更新，限制黑色文字只在填充区显示
-     * 安卓 AOSP 同款：填充区黑字/白底，空白区白字/黑底，交界处像素级精准切换 */
-    battery_clip = lv_obj_create(battery_container);
-    lv_obj_set_pos(battery_clip, 0, 0);
-    lv_obj_set_size(battery_clip, 0, battery_h);   /* 初始宽度0，更新时设为fill_w+2 */
-    lv_obj_set_style_bg_opa(battery_clip, LV_OPA_TRANSP, LV_PART_MAIN);
-    lv_obj_set_style_border_width(battery_clip, 0, LV_PART_MAIN);
-    lv_obj_set_style_pad_all(battery_clip, 0, LV_PART_MAIN);
-    lv_obj_set_style_radius(battery_clip, 0, LV_PART_MAIN);
-    lv_obj_clear_flag(battery_clip, LV_OBJ_FLAG_SCROLLABLE);
-    /* LVGL 默认行为：子对象超出 parent 边界即被裁剪，无需额外标志 */
-    lv_obj_add_flag(battery_clip, LV_OBJ_FLAG_HIDDEN);
-
-    /* 黑色文字层：挂在 battery_clip 下，宽度保持 battery_w 以保证居中对齐 */
-    battery_label_filled = lv_label_create(battery_clip);
-    lv_label_set_text(battery_label_filled, "");
-    lv_obj_set_style_text_font(battery_label_filled, &lv_font_montserrat_8, LV_PART_MAIN);
-    lv_obj_set_style_text_color(battery_label_filled, (lv_color_t)LV_COLOR_MAKE(0x00, 0x00, 0x00), LV_PART_MAIN);
-    lv_obj_set_style_text_align(battery_label_filled, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
-    lv_obj_set_style_pad_all(battery_label_filled, 0, LV_PART_MAIN);
-    lv_obj_set_style_bg_opa(battery_label_filled, LV_OPA_TRANSP, LV_PART_MAIN);
-    lv_obj_set_size(battery_label_filled, battery_w, battery_h);
-    lv_obj_set_pos(battery_label_filled, 0, 0);
 
     /* Battery percentage label (outside, to the right of battery cap) */
     battery_percent_label = lv_label_create(root_page);
@@ -1296,40 +1272,31 @@ void watchface_update_battery(void)
         /* Always show gray border (including 90-100%) */
         lv_obj_set_style_border_width(battery_container, 1, LV_PART_MAIN);
 
-        /* Percentage display mode: 0=hidden, 1=inside battery, 2=outside battery */
+        /* Percentage display mode: 0=hidden, 1=left side no%, 2=right side with% */
         if (battery_display_mode == 1) {
-            /* Inside: split-color text（安卓 AOSP 同款）
-             * - battery_label（白字，全宽）：在空白区（黑底）可见
-             * - battery_clip 宽度 = fill_w+2，裁剪黑色文字只显示在填充区
-             * - battery_label_filled（黑字，全宽）：在填充区（白底）可见
-             * 任意电量下字符均可读，交界处像素级自动切色 */
+            /* 左侧：纯数字无%，永远在黑色背景上，低电量红色 */
             char percent_str[4];
             snprintf(percent_str, sizeof(percent_str), "%d", battery_level);
             label_set_text(battery_label, percent_str);
-            label_set_text(battery_label_filled, percent_str);
-            /* fill_w+2：填充条从 x=2 开始，clip 从 x=0 起到达同一右边界 */
-            lv_obj_set_width(battery_clip, fill_w + 2);
+            lv_color_t text_color = (battery_level <= 20)
+                ? (lv_color_t)LV_COLOR_MAKE(0xFF, 0x33, 0x33)
+                : theme_get_colors()->data_val;
+            lv_obj_set_style_text_color(battery_label, text_color, LV_PART_MAIN);
             lv_obj_clear_flag(battery_label, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_clear_flag(battery_clip, LV_OBJ_FLAG_HIDDEN);
             lv_obj_add_flag(battery_percent_label, LV_OBJ_FLAG_HIDDEN);
         } else if (battery_display_mode == 2) {
-            /* Outside: number with % sign, red text on low battery (<= 20%) */
+            /* 右侧：数字+%，低电量红色 */
             char percent_str[5];
             snprintf(percent_str, sizeof(percent_str), "%d%%", battery_level);
             label_set_text(battery_percent_label, percent_str);
-
             lv_color_t text_color = (battery_level <= 20)
-                ? (lv_color_t)LV_COLOR_MAKE(0xFF, 0x33, 0x33)  /* Red warning */
-                : theme_get_colors()->data_val;                 /* Normal color */
+                ? (lv_color_t)LV_COLOR_MAKE(0xFF, 0x33, 0x33)
+                : theme_get_colors()->data_val;
             lv_obj_set_style_text_color(battery_percent_label, text_color, LV_PART_MAIN);
-
             lv_obj_clear_flag(battery_percent_label, LV_OBJ_FLAG_HIDDEN);
             lv_obj_add_flag(battery_label, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_add_flag(battery_clip, LV_OBJ_FLAG_HIDDEN);
         } else {
-            /* Hidden */
             lv_obj_add_flag(battery_label, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_add_flag(battery_clip, LV_OBJ_FLAG_HIDDEN);
             lv_obj_add_flag(battery_percent_label, LV_OBJ_FLAG_HIDDEN);
         }
     }
