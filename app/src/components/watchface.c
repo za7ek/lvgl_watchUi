@@ -969,7 +969,7 @@ void watchface_start(void)
     lv_obj_set_style_text_align(battery_bar_label, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
     lv_obj_set_style_pad_all(battery_bar_label, 0, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(battery_bar_label, LV_OPA_TRANSP, LV_PART_MAIN);
-    lv_obj_set_pos(battery_bar_label, 2, 2);
+    lv_obj_set_pos(battery_bar_label, 2, 0);   /* y=0：|字形ofs_y=2，绝对y=2，紧贴上边框居中 */
     lv_obj_set_size(battery_bar_label, 20, battery_h);
     lv_label_set_long_mode(battery_bar_label, LV_LABEL_LONG_CLIP);
 
