@@ -10,6 +10,7 @@
 #include "lv_font_segments80.h"
 #include "lv_font_led.h"
 #include "lv_font_xsmol.h"
+#include "lv_font_battbar.h"
 #include "lv_font_moon.h"
 #include "lv_font_icons.h"
 #include "settings.h"
@@ -131,6 +132,24 @@ LOG_MODULE_REGISTER(watchface, LOG_LEVEL_INF);
 #define ICON_Y       (BOTTOM_ROW_Y - 1)
 #define ICON_X_LEFT  (BOTTOM5_X - ICON_GAP - ICON_W)
 #define ICON_X_RIGHT (BOTTOM5_X + BOTTOM5_W + ICON_GAP)
+
+/* 最后一行：电池。外框 BATT_W×BATT_H，border 1 → 内容区 (BATT_W-2)×(BATT_H-2)。
+ * 子对象坐标是相对内容区原点的，所以下面的 BATT_* 全是内容区坐标。
+ * 填充条 20 格 × 1px 放在 (1,1)，四边各留 1px 空隙；配合 lv_font_battbar
+ * （line_height=8、字形 1×8 满格、ofs_y=0）字形顶边就是标签 y，绝对占 y2..y9。
+ * 内部数字层用 montserrat_8（line_height=10、base_line=2，数字 6px 高），
+ * y=0 时数字落在内容区 y2..y7 —— 在 10px 内容区里居中。 */
+#define BATT_W       24
+#define BATT_H       12
+#define BATT_INNER_W (BATT_W - 2)
+#define BATT_INNER_H (BATT_H - 2)
+#define BATT_SEGS    20   /* 填充格数，同 Segment34.CN getBattData() 小屏版的 max=20 */
+#define BATT_BAR_X   1
+#define BATT_BAR_Y   1
+#define BATT_BAR_W   BATT_SEGS
+#define BATT_BAR_H   8
+#define BATT_NUM_X   0
+#define BATT_NUM_Y   0
 
 /* ---------------------------------------------------------------------------
  * 圆形可视区的编译期校核
@@ -383,10 +402,13 @@ static lv_obj_t *bottom5_val_labels[BOTTOM5_DIGITS];
 
 static lv_obj_t *battery_container = NULL;
 static lv_obj_t *battery_bar_label = NULL;    /* 字符条（| 实心 / { 空心），同 Segment34.CN battFull/battEmpty */
-static lv_obj_t *battery_cap_obj = NULL;      /* 电池正极头（mode=0 时一并隐藏） */
-static lv_obj_t *battery_label = NULL;        /* 数字标签（电池左侧，无%） */
+static lv_obj_t *battery_cap_obj = NULL;      /* 电池正极头 */
+static lv_obj_t *battery_inner_label = NULL;  /* 内部数字·白字层（空白区/黑底上可见） */
+static lv_obj_t *battery_inner_clip = NULL;   /* 裁剪容器，宽度跟随填充条 */
+static lv_obj_t *battery_inner_dark = NULL;   /* 内部数字·黑字层（填充区/白底上可见，被 clip 裁掉右半） */
 static lv_obj_t *battery_percent_label = NULL; /* 数字标签（电池右侧，带%） */
-static int battery_display_mode = 0;           /* 0=不显示, 1=左侧显示, 2=右侧显示% */
+/* 0=只填充不显示数字, 1=填充+内部数字, 2=填充+右侧数字带% —— 见 watchface_switch_battery_display() */
+static int battery_display_mode = 0;
 static int moon_display_mode = 1;              /* 0=显示文字, 1=显示图片（默认图片） */
 
 static lv_obj_t *stress_bar = NULL;
@@ -947,43 +969,75 @@ void watchface_start(void)
     /* Battery icon — dynamic with fill based on battery level
      * Row 10: centered at bottom, showing battery level 0-100% */
     int battery_y = SCREEN_H - 17;
-    int battery_w = 24;
-    int battery_h = 12;
-    
+
     battery_container = lv_obj_create(root_page);
-    lv_obj_set_size(battery_container, battery_w, battery_h);
-    lv_obj_set_pos(battery_container, CENTER_X - battery_w / 2, battery_y);
+    lv_obj_set_size(battery_container, BATT_W, BATT_H);
+    lv_obj_set_pos(battery_container, CENTER_X - BATT_W / 2, battery_y);
     lv_obj_set_style_bg_opa(battery_container, LV_OPA_TRANSP, LV_PART_MAIN);
     lv_obj_set_style_border_width(battery_container, 1, LV_PART_MAIN);
     lv_obj_set_style_border_color(battery_container, (lv_color_t)LV_COLOR_MAKE(0xa0, 0xa0, 0xa0), LV_PART_MAIN);
     lv_obj_set_style_radius(battery_container, 2, LV_PART_MAIN);
     lv_obj_set_style_pad_all(battery_container, 0, LV_PART_MAIN);
 
-    /* 字符条：用 '|'（实心段）+ '{'（空心段）拼成填充条，同 Segment34.CN 的 battFull/battEmpty 逻辑。
-     * lv_font_xsmol 中 '|' 是 1×7px 实心竖线，'{' 是 1×8px 全空（透明）；
-     * 20 个字符正好填满电池容器 20px 内容宽。 */
+    /* 字符条：用 '|'（实心格）+ '{'（空心格）拼成填充条，同 Segment34.CN 的 battFull/battEmpty 逻辑。
+     * 字体是 lv_font_battbar —— 专为这个电池写死的：字形 1×8 满格，line_height=8，
+     * ofs_y=0，所以字形顶边就等于标签 y 坐标，不用再倒推图集里的字形偏移。
+     * 外框 24×12 + border 1 → 内容区 22×10；条放 (1,1)、20×8，四边各留 1px，
+     * 绝对占 y2..y9，上下对称。（以前借 smol.fnt 的 '|' 只有 7 行实心、还带
+     * ofs_y=2，怎么摆都是"上边贴死、下边留缝"。） */
     battery_bar_label = lv_label_create(battery_container);
     lv_label_set_text(battery_bar_label, "");
-    lv_obj_set_style_text_font(battery_bar_label, &lv_font_xsmol, LV_PART_MAIN);
+    lv_obj_set_style_text_font(battery_bar_label, &lv_font_battbar, LV_PART_MAIN);
     lv_obj_set_style_text_color(battery_bar_label, colors->battery, LV_PART_MAIN);
     lv_obj_set_style_text_align(battery_bar_label, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
     lv_obj_set_style_pad_all(battery_bar_label, 0, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(battery_bar_label, LV_OPA_TRANSP, LV_PART_MAIN);
-    lv_obj_set_pos(battery_bar_label, 2, 0);   /* y=0：|字形ofs_y=2，绝对y=2，紧贴上边框居中 */
-    lv_obj_set_size(battery_bar_label, 20, battery_h);
+    lv_obj_set_pos(battery_bar_label, BATT_BAR_X, BATT_BAR_Y);
+    lv_obj_set_size(battery_bar_label, BATT_BAR_W, BATT_BAR_H);
     lv_label_set_long_mode(battery_bar_label, LV_LABEL_LONG_CLIP);
 
-    /* 电池左侧数字标签（模式1，无%，永远在黑色背景上，清晰可读）
-     * x = battery_x - gap - width = (CENTER_X-12) - 4 - 20 = 84 */
-    battery_label = lv_label_create(root_page);
-    lv_label_set_text(battery_label, "");
-    lv_obj_set_style_text_font(battery_label, &lv_font_montserrat_8, LV_PART_MAIN);
-    lv_obj_set_style_text_color(battery_label, colors->data_val, LV_PART_MAIN);
-    lv_obj_set_style_text_align(battery_label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
-    lv_obj_set_style_pad_all(battery_label, 0, LV_PART_MAIN);
-    lv_obj_set_pos(battery_label, CENTER_X - battery_w / 2 - 4 - 20, battery_y + 2);
-    lv_obj_set_width(battery_label, 20);
-    lv_obj_add_flag(battery_label, LV_OBJ_FLAG_HIDDEN);
+    /* 模式 1 的内部数字：安卓 AOSP 同款双层叠字 + 裁剪容器。
+     * 单色文字在这里必然翻车 —— 白字压在白色填充条上看不见，黑字压在黑色空白区
+     * 也看不见，而填充条的边界会随电量滑过数字中间，任何"按电量选一种颜色"的
+     * 阈值判断都会在半覆盖时糊掉一半字符。所以两层同字同位叠着画：
+     *   battery_inner_label（白字，整个内容区宽）：负责空白区（黑底）
+     *   battery_inner_dark （黑字，同宽）挂在 battery_inner_clip 里，
+     *     clip 宽度实时设成填充条右边界，超出部分被 LVGL 裁掉 → 只在填充区可见
+     * 两层坐标完全一致，交界处逐像素换色，无断层。 */
+    battery_inner_label = lv_label_create(battery_container);
+    lv_label_set_text(battery_inner_label, "");
+    lv_obj_set_style_text_font(battery_inner_label, &lv_font_montserrat_8, LV_PART_MAIN);
+    lv_obj_set_style_text_color(battery_inner_label, (lv_color_t)LV_COLOR_MAKE(0xff, 0xff, 0xff), LV_PART_MAIN);
+    lv_obj_set_style_text_align(battery_inner_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(battery_inner_label, 0, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(battery_inner_label, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_pos(battery_inner_label, BATT_NUM_X, BATT_NUM_Y);
+    lv_obj_set_size(battery_inner_label, BATT_INNER_W, BATT_INNER_H);
+    lv_label_set_long_mode(battery_inner_label, LV_LABEL_LONG_CLIP);
+    lv_obj_add_flag(battery_inner_label, LV_OBJ_FLAG_HIDDEN);
+
+    battery_inner_clip = lv_obj_create(battery_container);
+    lv_obj_set_pos(battery_inner_clip, BATT_BAR_X, 0);
+    lv_obj_set_size(battery_inner_clip, 0, BATT_INNER_H);  /* 宽度每次刷新按填充量设置 */
+    lv_obj_set_style_bg_opa(battery_inner_clip, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_border_width(battery_inner_clip, 0, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(battery_inner_clip, 0, LV_PART_MAIN);
+    lv_obj_set_style_radius(battery_inner_clip, 0, LV_PART_MAIN);
+    lv_obj_clear_flag(battery_inner_clip, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(battery_inner_clip, LV_OBJ_FLAG_HIDDEN);
+
+    /* 黑字层：x 补回 -BATT_BAR_X，抵消 clip 容器自身的偏移，
+     * 让它和 battery_inner_label 落在同一个绝对坐标上，两层才叠得住。 */
+    battery_inner_dark = lv_label_create(battery_inner_clip);
+    lv_label_set_text(battery_inner_dark, "");
+    lv_obj_set_style_text_font(battery_inner_dark, &lv_font_montserrat_8, LV_PART_MAIN);
+    lv_obj_set_style_text_color(battery_inner_dark, (lv_color_t)LV_COLOR_MAKE(0x00, 0x00, 0x00), LV_PART_MAIN);
+    lv_obj_set_style_text_align(battery_inner_dark, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(battery_inner_dark, 0, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(battery_inner_dark, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_pos(battery_inner_dark, BATT_NUM_X - BATT_BAR_X, BATT_NUM_Y);
+    lv_obj_set_size(battery_inner_dark, BATT_INNER_W, BATT_INNER_H);
+    lv_label_set_long_mode(battery_inner_dark, LV_LABEL_LONG_CLIP);
 
     /* Battery percentage label (outside, to the right of battery cap) */
     battery_percent_label = lv_label_create(root_page);
@@ -992,13 +1046,13 @@ void watchface_start(void)
     lv_obj_set_style_text_color(battery_percent_label, colors->data_val, LV_PART_MAIN);
     lv_obj_set_style_text_align(battery_percent_label, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
     lv_obj_set_style_pad_all(battery_percent_label, 0, LV_PART_MAIN);
-    lv_obj_set_pos(battery_percent_label, CENTER_X + battery_w / 2 + 5, battery_y + 2);
+    lv_obj_set_pos(battery_percent_label, CENTER_X + BATT_W / 2 + 5, battery_y + 2);
     lv_obj_add_flag(battery_percent_label, LV_OBJ_FLAG_HIDDEN);
 
-    /* Battery cap (mode 0 时一并隐藏) */
+    /* Battery cap（电池正极头，三种模式下都显示） */
     battery_cap_obj = lv_obj_create(root_page);
     lv_obj_set_size(battery_cap_obj, 3, 6);
-    lv_obj_set_pos(battery_cap_obj, CENTER_X + battery_w / 2, battery_y + 3);
+    lv_obj_set_pos(battery_cap_obj, CENTER_X + BATT_W / 2, battery_y + 3);
     lv_obj_set_style_bg_color(battery_cap_obj, (lv_color_t)LV_COLOR_MAKE(0xa0, 0xa0, 0xa0), LV_PART_MAIN);
     lv_obj_set_style_bg_opa(battery_cap_obj, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_radius(battery_cap_obj, 1, LV_PART_MAIN);
@@ -1253,16 +1307,12 @@ void watchface_update_battery(void)
 {
     if (!battery_container || !battery_bar_label) return;
 
-    if (battery_display_mode == 0) {
-        /* 模式 0：完全隐藏（外框/正极头/标签），同 Segment34.CN variant=2 */
-        lv_obj_add_flag(battery_container,    LV_OBJ_FLAG_HIDDEN);
-        lv_obj_add_flag(battery_cap_obj,      LV_OBJ_FLAG_HIDDEN);
-        lv_obj_add_flag(battery_label,        LV_OBJ_FLAG_HIDDEN);
-        lv_obj_add_flag(battery_percent_label, LV_OBJ_FLAG_HIDDEN);
-        return;
-    }
-
-    /* 模式 1/2/3：显示电池图标 + 字符填充条 */
+    /* 三种模式都画电池外框 + 填充条，区别只在数字放哪：
+     *   0 = 只填充，不显示数字
+     *   1 = 填充 + 数字叠在电池内部（分色）
+     *   2 = 填充 + 数字在电池右侧，带 %
+     * （Segment34.CN 本身没有"数字在电池内部"这一档 —— 它的 batteryVariant
+     *   只有 剩余天数/百分比/条/隐藏 四种，且数字一律画在电池外面。） */
     lv_obj_clear_flag(battery_container, LV_OBJ_FLAG_HIDDEN);
     lv_obj_clear_flag(battery_cap_obj,   LV_OBJ_FLAG_HIDDEN);
 
@@ -1270,15 +1320,15 @@ void watchface_update_battery(void)
     if (battery_level < 0)   battery_level = 0;
     if (battery_level > 100) battery_level = 100;
 
-    /* 字符填充条：fill_count 个 '|' + (20-fill_count) 个 '{'
-     * 同 Segment34.CN getBattData() variant=3 逻辑（20格，小屏版） */
-    int fill_count = (battery_level * 20) / 100;
+    /* 字符填充条：fill_count 个 '|' + 剩下的 '{'
+     * 同 Segment34.CN getBattData() variant=3 逻辑（20 格，小屏版） */
+    int fill_count = (battery_level * BATT_SEGS) / 100;
     if (fill_count < 1 && battery_level > 0) fill_count = 1;
 
-    char bar_str[21];
+    char bar_str[BATT_SEGS + 1];
     memset(bar_str,              '|', (size_t)fill_count);
-    memset(bar_str + fill_count, '{', (size_t)(20 - fill_count));
-    bar_str[20] = '\0';
+    memset(bar_str + fill_count, '{', (size_t)(BATT_SEGS - fill_count));
+    bar_str[BATT_SEGS] = '\0';
     label_set_text(battery_bar_label, bar_str);
 
     /* 颜色：≤10% 红，≥90% 绿，其他白 */
@@ -1292,29 +1342,34 @@ void watchface_update_battery(void)
     }
     lv_obj_set_style_text_color(battery_bar_label, bar_color, LV_PART_MAIN);
 
-    lv_color_t num_color = (battery_level <= 20)
-        ? (lv_color_t)LV_COLOR_MAKE(0xFF, 0x33, 0x33)
-        : theme_get_colors()->data_val;
+    char num_str[5];
 
     if (battery_display_mode == 1) {
-        /* 左侧数字，无 % */
-        char s[4];
-        snprintf(s, sizeof(s), "%d", battery_level);
-        label_set_text(battery_label, s);
-        lv_obj_set_style_text_color(battery_label, num_color, LV_PART_MAIN);
-        lv_obj_clear_flag(battery_label, LV_OBJ_FLAG_HIDDEN);
+        /* 内部数字：白字层铺满，黑字层被 clip 裁到填充条右边界。
+         * clip 的左边与填充条同为 BATT_BAR_X，宽度就等于填充格数（每格 1px），
+         * 所以裁切边界和白/黑底的分界线是同一条，永远不会错位半格。 */
+        snprintf(num_str, sizeof(num_str), "%d", battery_level);
+        label_set_text(battery_inner_label, num_str);
+        label_set_text(battery_inner_dark,  num_str);
+        lv_obj_set_width(battery_inner_clip, fill_count);
+        lv_obj_clear_flag(battery_inner_label, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(battery_inner_clip,  LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(battery_percent_label, LV_OBJ_FLAG_HIDDEN);
     } else if (battery_display_mode == 2) {
-        /* 右侧数字，带 % */
-        char s[5];
-        snprintf(s, sizeof(s), "%d%%", battery_level);
-        label_set_text(battery_percent_label, s);
+        /* 右侧数字，带 %；低电量转红 */
+        lv_color_t num_color = (battery_level <= 20)
+            ? (lv_color_t)LV_COLOR_MAKE(0xFF, 0x33, 0x33)
+            : theme_get_colors()->data_val;
+        snprintf(num_str, sizeof(num_str), "%d%%", battery_level);
+        label_set_text(battery_percent_label, num_str);
         lv_obj_set_style_text_color(battery_percent_label, num_color, LV_PART_MAIN);
         lv_obj_clear_flag(battery_percent_label, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_add_flag(battery_label, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(battery_inner_label, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(battery_inner_clip,  LV_OBJ_FLAG_HIDDEN);
     } else {
-        /* 模式 3：仅字符条，不显示数字 */
-        lv_obj_add_flag(battery_label,        LV_OBJ_FLAG_HIDDEN);
+        /* 模式 0：只填充，不显示数字 */
+        lv_obj_add_flag(battery_inner_label,   LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(battery_inner_clip,    LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(battery_percent_label, LV_OBJ_FLAG_HIDDEN);
     }
 }
@@ -1403,7 +1458,8 @@ void watchface_set_move_bar_level(int level)
 
 void watchface_switch_battery_display(void)
 {
-    /* Cycle: 0=不显示 → 1=内部显示 → 2=外部显示 → 0 */
+    /* 三档循环：0=只填充 → 1=填充+内部数字 → 2=填充+右侧数字带% → 0
+     * 电池图标在三档里都画出来，没有"整个隐藏"这一档。 */
     battery_display_mode = (battery_display_mode + 1) % 3;
     watchface_update_battery();
 }

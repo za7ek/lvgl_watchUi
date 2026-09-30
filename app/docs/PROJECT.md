@@ -295,6 +295,7 @@ watchface_set_move_bar_level(0);        /* 0-5，越界自动收到最近的合�
 | `lv_font_segments80` | 42×80, 4bpp | 大时钟（数字 + `:` + `#` 网格） | `app/scripts/bmfont2lvgl.py` |
 | `lv_font_led` | 14×20, 1bpp | 字段数值 + 步数（反相极性） | `tools/gen_led_font_v3.py` **+ 手改** |
 | `lv_font_xsmol` | 10px, 1bpp | 小标签 | `tools/gen_font.py` |
+| `lv_font_battbar` | 1×8, 1bpp | 电池填充条（`\|` / `{`） | 手写，见 FONTS.md §10 |
 | `lv_font_cjk` | 13px, 4bpp, 211 字形 | 中文行 + ℃/箭头 | `gen_cjk_font.py`（项目根） |
 | `lv_font_moon` | 20×20, 1bpp, 9 字形 | 月相 `'0'`-`'7'` + 死星 `'8'` | `tools/gen_font.py` |
 | `lv_font_icons` | 21px, 1bpp | 状态图标 `A/D/L/N-R` | `tools/gen_font.py` |

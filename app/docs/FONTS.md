@@ -420,5 +420,34 @@ lv_obj_set_style_text_font(label, &lv_font_xxx, LV_PART_MAIN);
 | `lv_font_cjk.c` | `lv_font_cjk` | 13px | 中文天气行/农历行/日期行（含 ℃/箭头） | 4 | `gen_cjk_font.py`（项目根）生成 |
 | `lv_font_moon.c` | `lv_font_moon` | 20×20, 9 字形 | 月相图片（`'0'`-`'7'`= 8 相，`'8'`= 死星彩蛋） | 1 | `tools/gen_font.py` 生成 |
 | `lv_font_icons.c` | `lv_font_icons` | 21px | 状态图标（`A`=闹钟 `D`=勿扰 `L`=蓝牙 `N`-`R`=久坐级别） | 1 | `tools/gen_font.py` 生成 |
+| `lv_font_battbar.c` | `lv_font_battbar` | 1×8, 2 字形 | 电池填充条（`\|`=实心格 `{`=空心格） | 1 | **手写**，见 §10 |
 
 > `lv_font_led.c` 每次用 `gen_led_font_v3.py` 重新生成后，**必须执行 §5.3 的 3 条手改**，否则会出现数字显示偏移 / 空格占位框 / LVGL 占位符渲染等问题。
+
+---
+
+## 10. lv_font_battbar（电池填充条，手写）
+
+唯一一个不由脚本生成的字体，只有 `'|'`（实心格）和 `'{'`（空心格）两个字形，
+`watchface.c` 用它们拼出电池里的填充条（同 Segment34.CN 的 `battFull`/`battEmpty`）。
+
+**为什么不从图集转**：
+
+1. Segment34.CN 的 `xsmol.fnt` 里没有这两个字符 —— 只有 13px 的 `smol.fnt` 有。
+   历史上 `lv_font_xsmol.c` 就是为了拿到它们而误用 `smol.fnt` 生成的，副作用是
+   所有小标签整整大了 3px，`RECOVERY HRS:` 渲染到 74px、撑破 64px 的字段容器，
+   跟隔壁 `LAST HR:` 叠在一起。**改 xsmol 时别再回头去动 smol.fnt。**
+2. 就算去 `smol.fnt` 里取，它的 `'|'` 是 1×8 的框、只有 7 行实心、还带 `ofs_y=2`，
+   塞进 12px 高（内框 10px）的电池里怎么摆都是"上边贴死、下边留缝"。
+
+所以直接按电池几何写死：`line_height = 8`、字形 `1×8` 满格实心、`ofs_y = 0`、
+`adv_w = 16`（1.0px）。LVGL 的字形落点是
+
+```
+y1 = pos.y + (line_height - base_line) - box_h - ofs_y = pos.y + 0
+```
+
+即**标签的 y 坐标就是条的顶边**，摆放时不用再倒推图集偏移。20 个字形首尾相接
+正好 20px，配合 `watchface.c` 里的 `BATT_*` 常量在 22×10 的内容区里四边各留 1px。
+
+改电池尺寸时同步改 `line_height` / `box_h` 和 `BATT_BAR_H`，三者必须相等。

@@ -14,6 +14,7 @@ target_sources(app PRIVATE
     src/fonts/lv_font_segments80.c
     src/fonts/lv_font_led.c
     src/fonts/lv_font_xsmol.c
+    src/fonts/lv_font_battbar.c
     src/fonts/lv_font_moon.c
     src/fonts/lv_font_icons.c
 )
